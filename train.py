@@ -262,6 +262,52 @@ def auto_shrink_batch_size(args: argparse.Namespace, model: nn.Module, device: s
 
 
 # --------------------------------------------------------------------------
+# logging
+# --------------------------------------------------------------------------
+
+def format_duration(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}h{m:02d}m{s:02d}s"
+    if m:
+        return f"{m}m{s:02d}s"
+    return f"{s}s"
+
+
+def gpu_memory_str(device: str) -> str:
+    if device != "cuda" or not torch.cuda.is_available():
+        return "n/a"
+    alloc = torch.cuda.memory_allocated() / 1e9
+    reserved = torch.cuda.memory_reserved() / 1e9
+    peak = torch.cuda.max_memory_allocated() / 1e9
+    return f"{alloc:.2f}/{reserved:.2f}GB alloc/reserved (peak {peak:.2f}GB)"
+
+
+def print_run_header(args: argparse.Namespace, model: nn.Module, train_loader, val_loader) -> None:
+    n_params = sum(p.numel() for p in model.parameters())
+    effective_batch = args.batch_size * args.accum_steps
+    print("=" * 78)
+    print(f"  dataset       {args.dataset}   (train={len(train_loader.dataset)} val={len(val_loader.dataset)})")
+    print(f"  backbone      {args.backbone}  ({n_params/1e6:.2f}M params, "
+          f"pretrained={not args.no_pretrained})")
+    print(f"  image size    {args.img_size}px   multi-scale={args.multi_scale}")
+    print(f"  batch size    {args.batch_size} x {args.accum_steps} accum = {effective_batch} effective")
+    print(f"  optimiser     {args.optimizer}  lr={args.lr:.1e} (backbone x{args.backbone_lr_mult})  "
+          f"wd={args.weight_decay:.1e}  scheduler={args.scheduler}")
+    print(f"  augmentation  hflip={args.hflip_prob} rotate=+/-{args.rotate_deg} "
+          f"scale=[{args.scale_min},{args.scale_max}] color_jitter={args.color_jitter} "
+          f"{'(disabled)' if args.no_augment else ''}")
+    print(f"  loss weights  side={args.side_weights} edge={args.edge_weight} presence={args.presence_weight}")
+    print(f"  precision     amp={args.amp}  ema={args.ema} (decay={args.ema_decay if args.ema else 'n/a'})")
+    print(f"  epochs        {args.epochs}   (save_every={args.save_every}  val_every={args.val_every})")
+    print(f"  device        {args.device}")
+    print(f"  output        {args.out}")
+    print("=" * 78)
+
+
+# --------------------------------------------------------------------------
 # train / validate
 # --------------------------------------------------------------------------
 
@@ -271,6 +317,7 @@ def run_epoch_train(model, loader, criterion, optimizer, scheduler, scaler, ema,
 
     totals = {"total": 0.0, "final": 0.0, "side": 0.0, "edge": 0.0, "presence": 0.0}
     n_batches = 0
+    n_steps = len(loader)
     t0 = time.time()
 
     for step, batch in enumerate(loader):
@@ -307,12 +354,20 @@ def run_epoch_train(model, loader, criterion, optimizer, scheduler, scaler, ema,
             totals[key] += losses[key].item() if key != "total" else losses["total"].item()
         n_batches += 1
 
-        if (step + 1) % args.log_every == 0:
+        if (step + 1) % args.log_every == 0 or (step + 1) == n_steps:
             lr = optimizer.param_groups[-1]["lr"]
             elapsed = time.time() - t0
-            print(f"  epoch {epoch} step {step+1}/{len(loader)} "
-                  f"loss={totals['total']/n_batches:.4f} lr={lr:.2e} "
-                  f"({elapsed/n_batches:.2f}s/it)")
+            s_per_it = elapsed / n_batches
+            eta_epoch = s_per_it * (n_steps - (step + 1))
+            pct = 100 * (step + 1) / n_steps
+            print(
+                f"  [epoch {epoch}] step {step+1:>4}/{n_steps} ({pct:5.1f}%) | "
+                f"loss {totals['total']/n_batches:7.4f} "
+                f"(final={totals['final']/n_batches:.3f} side={totals['side']/n_batches:.3f} "
+                f"edge={totals['edge']/n_batches:.3f} pres={totals['presence']/n_batches:.3f}) | "
+                f"lr {lr:.2e} | {s_per_it:.2f}s/it | ETA {format_duration(eta_epoch)} | "
+                f"GPU {gpu_memory_str(args.device)}"
+            )
 
     return {k: v / max(1, n_batches) for k, v in totals.items()}, global_step
 
@@ -425,8 +480,6 @@ def main() -> None:
 
     train_loader = make_loader(args, "train")
     val_loader = make_loader(args, "val")
-    print(f"[train.py] dataset={args.dataset} train={len(train_loader.dataset)} val={len(val_loader.dataset)} "
-          f"img_size={args.img_size} batch_size={args.batch_size}")
 
     model = CHDNet(backbone=args.backbone, pretrained=not args.no_pretrained, os_streams=args.os_streams)
     model.to(args.device)
@@ -442,6 +495,8 @@ def main() -> None:
             "with drop_last=True yields zero batches per epoch. Lower --batch-size, raise --limit, "
             "or use more data — training would otherwise silently do nothing every epoch."
         )
+
+    print_run_header(args, model, train_loader, val_loader)
 
     criterion = CHDLoss(
         side_weights=tuple(args.side_weights), edge_weight=args.edge_weight, presence_weight=args.presence_weight,
@@ -484,8 +539,10 @@ def main() -> None:
             writer.writerow(["epoch", "train_total", "train_final", "train_side", "train_edge",
                              "train_presence", "val_mae", "val_s_alpha", "lr", "seconds"])
 
+    run_start = time.time()
     for epoch in range(start_epoch, args.epochs):
         t0 = time.time()
+        print(f"\n--- epoch {epoch + 1}/{args.epochs} " + "-" * 50)
         train_losses, global_step = run_epoch_train(
             model, train_loader, criterion, optimizer, scheduler, scaler, ema, args, epoch, global_step,
         )
@@ -494,8 +551,23 @@ def main() -> None:
         if (epoch + 1) % args.val_every == 0:
             eval_model = ema.shadow if ema is not None else model
             val_metrics = run_validation(eval_model, val_loader, args)
-            print(f"[epoch {epoch}] train_loss={train_losses['total']:.4f} "
-                  f"val_mae={val_metrics['mae']:.4f} val_s_alpha={val_metrics['s_alpha']:.4f}")
+
+        epoch_seconds = time.time() - t0
+        epochs_done_this_run = epoch - start_epoch + 1
+        avg_epoch_seconds = (time.time() - run_start) / epochs_done_this_run
+        remaining_epochs = args.epochs - (epoch + 1)
+        is_new_best = val_metrics["s_alpha"] > best_s_alpha
+
+        print(f"  epoch {epoch + 1}/{args.epochs} summary "
+              f"(this epoch {format_duration(epoch_seconds)}, "
+              f"ETA remaining {format_duration(avg_epoch_seconds * remaining_epochs)}):")
+        print(f"    train loss   total={train_losses['total']:.4f}  final={train_losses['final']:.4f}  "
+              f"side={train_losses['side']:.4f}  edge={train_losses['edge']:.4f}  "
+              f"presence={train_losses['presence']:.4f}")
+        print(f"    val metrics  MAE={val_metrics['mae']:.4f} (lower better)   "
+              f"S_alpha={val_metrics['s_alpha']:.4f} (higher better)"
+              + ("   <-- NEW BEST" if is_new_best else f"   (best so far: {max(best_s_alpha, 0):.4f})"))
+        print(f"    lr           {optimizer.param_groups[-1]['lr']:.3e}")
 
         with history_path.open("a", newline="") as fh:
             csv.writer(fh).writerow([
@@ -514,27 +586,38 @@ def main() -> None:
         }
         torch.save(checkpoint, args.out / "last.pth")
 
-        if val_metrics["s_alpha"] > best_s_alpha:
+        if is_new_best:
             best_s_alpha = val_metrics["s_alpha"]
             checkpoint["best_s_alpha"] = best_s_alpha
             torch.save(checkpoint, args.out / "best.pth")
-            print(f"[epoch {epoch}] new best S_alpha={best_s_alpha:.4f}, saved best.pth")
 
         # Durable, never-overwritten snapshot every --save-every epochs (and
         # always on the final epoch) — last.pth/best.pth are safe to resume
         # from but get replaced every epoch, so a bad late run can't lose
         # access to a known-good earlier state without these.
         is_last_epoch = epoch == args.epochs - 1
-        if args.save_every > 0 and ((epoch + 1) % args.save_every == 0 or is_last_epoch):
+        saved_periodic = args.save_every > 0 and ((epoch + 1) % args.save_every == 0 or is_last_epoch)
+        if saved_periodic:
             checkpoints_dir = args.out / "checkpoints"
             checkpoints_dir.mkdir(parents=True, exist_ok=True)
             torch.save(checkpoint, checkpoints_dir / f"epoch_{epoch:04d}.pth")
-            print(f"[epoch {epoch}] saved periodic checkpoint checkpoints/epoch_{epoch:04d}.pth")
+
+        saved = ["last.pth"] + (["best.pth"] if is_new_best else []) \
+            + ([f"checkpoints/epoch_{epoch:04d}.pth"] if saved_periodic else [])
+        print(f"    saved        {', '.join(saved)}")
 
         plot_history(history_path, args.out / "plots")
         write_summary(args, model, history_path, best_s_alpha, epoch, args.out / "summary.json")
 
-    print(f"[train.py] done. best S_alpha={best_s_alpha:.4f}. history: {history_path}")
+    total_elapsed = time.time() - run_start
+    print("\n" + "=" * 78)
+    print(f"  training done: {args.epochs - start_epoch} epoch(s) run in {format_duration(total_elapsed)}")
+    print(f"  best S_alpha  = {best_s_alpha:.4f}")
+    print(f"  checkpoints   = {args.out}/{{last,best}}.pth, {args.out}/checkpoints/")
+    print(f"  plots         = {args.out}/plots/training_curves.png")
+    print(f"  full history  = {history_path}")
+    print(f"  summary json  = {args.out}/summary.json")
+    print("=" * 78)
 
 
 if __name__ == "__main__":
