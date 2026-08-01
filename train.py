@@ -174,6 +174,24 @@ def build_scheduler(optimizer: torch.optim.Optimizer, args: argparse.Namespace, 
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=step_with_warmup)
 
 
+def build_grad_scaler(enabled: bool):
+    """``torch.amp.GradScaler`` only exists from roughly torch 2.3 onward;
+    older installs (seen in practice on a fresh Windows pip install) only
+    have ``torch.cuda.amp.GradScaler``. Try the current API, fall back to
+    the legacy one, so this runs on whatever torch happens to be installed
+    on the training machine without pinning an exact version.
+    """
+    if hasattr(torch.amp, "GradScaler"):
+        return torch.amp.GradScaler("cuda", enabled=enabled)
+    return torch.cuda.amp.GradScaler(enabled=enabled)
+
+
+def is_oom_error(exc: Exception) -> bool:
+    """``torch.cuda.OutOfMemoryError`` doesn't exist before torch 2.0."""
+    oom_type = getattr(torch.cuda, "OutOfMemoryError", RuntimeError)
+    return isinstance(exc, oom_type) or "out of memory" in str(exc).lower()
+
+
 def set_backbone_bn_frozen(model: CHDNet, frozen: bool) -> None:
     for module in model.backbone.modules():
         if isinstance(module, nn.BatchNorm2d):
@@ -220,7 +238,9 @@ def auto_shrink_batch_size(args: argparse.Namespace, model: nn.Module, device: s
             print(f"[auto-batch] batch_size={batch_size} fits "
                   f"(peak {torch.cuda.max_memory_allocated()/1e9:.2f} GB)")
             return batch_size
-        except torch.cuda.OutOfMemoryError:
+        except RuntimeError as exc:
+            if not is_oom_error(exc):
+                raise
             torch.cuda.empty_cache()
             print(f"[auto-batch] batch_size={batch_size} OOM, halving")
             batch_size //= 2
@@ -414,7 +434,7 @@ def main() -> None:
     )
     optimizer = build_optimizer(model, args)
     scheduler = build_scheduler(optimizer, args, steps_per_epoch=max(1, len(train_loader) // args.accum_steps))
-    scaler = torch.amp.GradScaler("cuda", enabled=(args.amp and args.device == "cuda"))
+    scaler = build_grad_scaler(enabled=(args.amp and args.device == "cuda"))
     ema = EMA(model, args.ema_decay) if args.ema else None
 
     start_epoch, global_step, best_s_alpha = 0, 0, -1.0
