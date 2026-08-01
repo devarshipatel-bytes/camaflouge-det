@@ -252,6 +252,23 @@ class TestCHDNetTinyBackbone:
             out = model(image, pose)
         assert out["mask_logit"].shape == (1, 1, 64, 96)
 
+    def test_return_intermediates_flag(self) -> None:
+        model = self._model().eval()
+        image = torch.randn(1, 3, 64, 64)
+        pose = torch.randn(1, N_KEYPOINTS, 16, 16)
+        with torch.no_grad():
+            out_plain = model(image, pose)
+            out_full = model(image, pose, return_intermediates=True)
+
+        assert "intermediates" not in out_plain
+        assert "intermediates" in out_full
+        inter = out_full["intermediates"]
+        for key in ("backbone", "fdm_lf", "fdm_hf", "sfa", "osneck", "aer", "decoder_levels"):
+            assert key in inter
+            assert len(inter[key]) == 4, f"{key} should have one entry per pyramid level"
+        # the flag must not change the actual predictions
+        assert torch.equal(out_plain["mask_logit"], out_full["mask_logit"])
+
     def test_gradient_flow_end_to_end(self) -> None:
         model = self._model().train()
         image = torch.randn(2, 3, 64, 64)

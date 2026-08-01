@@ -57,18 +57,39 @@ class CHDNet(nn.Module):
         self.edge_head = EdgeHead(channels)
         self.presence_gate = PresenceGate(in_channels=FEATURE_CHANNELS[-1])
 
-    def forward(self, image: torch.Tensor, pose: torch.Tensor) -> dict[str, torch.Tensor]:
-        """``pose``: (B, 17, Hp, Wp), any spatial size — resized per level inside AER."""
+    def forward(
+        self, image: torch.Tensor, pose: torch.Tensor, return_intermediates: bool = False,
+    ) -> dict[str, torch.Tensor]:
+        """``pose``: (B, 17, Hp, Wp), any spatial size — resized per level inside AER.
+
+        ``return_intermediates``: when True, also returns an ``"intermediates"``
+        key holding every named extraction point (backbone features, FDM's
+        low/high-frequency split, SFA, OSNeck, AER, decoder levels) per
+        pyramid level — off by default so normal training/inference pays
+        zero extra cost. Built for ``scripts/07_visualize_pipeline.py``, but
+        usable anywhere the same input -> output -> intermediate story is
+        needed (e.g. a future predict.py debug mode).
+        """
         out_size = image.shape[-2:]
         backbone_feats = self.backbone(image)  # [F1, F2, F3, F4], raw channel counts
 
         tilde = []
+        intermediates = {"backbone": backbone_feats, "fdm_lf": [], "fdm_hf": [], "sfa": [], "osneck": [], "aer": []} \
+            if return_intermediates else None
+
         for i, feat in enumerate(backbone_feats):
             reduced = self.reduce[i](feat)
             f_lf, f_hf_hat = self.fdm[i](reduced)
             f_sfa = self.sfa[i](reduced, f_lf, f_hf_hat)
             f_os = self.osneck[i](f_sfa)
-            tilde.append(self.aer[i](f_os, pose))
+            f_tilde = self.aer[i](f_os, pose)
+            tilde.append(f_tilde)
+            if return_intermediates:
+                intermediates["fdm_lf"].append(f_lf)
+                intermediates["fdm_hf"].append(f_hf_hat)
+                intermediates["sfa"].append(f_sfa)
+                intermediates["osneck"].append(f_os)
+                intermediates["aer"].append(f_tilde)
 
         main_logit, side_feats = self.decoder(*tilde)
         main_logit = F.interpolate(main_logit, size=out_size, mode="bilinear", align_corners=False)
@@ -76,12 +97,16 @@ class CHDNet(nn.Module):
         edge_logit = self.edge_head(side_feats[0], out_size)
         presence_logit = self.presence_gate(backbone_feats[-1])
 
-        return {
+        outputs = {
             "mask_logit": main_logit,
             "side_logits": side_logits,
             "edge_logit": edge_logit,
             "presence_logit": presence_logit,
         }
+        if return_intermediates:
+            intermediates["decoder_levels"] = side_feats  # (x1, x2, x3, x4), finest to coarsest
+            outputs["intermediates"] = intermediates
+        return outputs
 
     @staticmethod
     def predict_mask(outputs: dict[str, torch.Tensor]) -> torch.Tensor:
