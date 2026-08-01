@@ -64,6 +64,13 @@ def build_parser() -> argparse.ArgumentParser:
     data.add_argument("--workers", type=int, default=8)
     data.add_argument("--limit", type=int, default=None, help="truncate train/val to N samples each (smoke tests)")
     data.add_argument("--no-pose", action="store_true", help="zero out the pose prior everywhere")
+    data.add_argument("--hflip-prob", type=float, default=0.5, help="train-time horizontal flip probability")
+    data.add_argument("--rotate-deg", type=float, default=15.0, help="train-time random rotation, +/- degrees")
+    data.add_argument("--scale-min", type=float, default=0.75, help="train-time random-crop-scale lower bound")
+    data.add_argument("--scale-max", type=float, default=1.25, help="train-time random-crop-scale upper bound")
+    data.add_argument("--color-jitter", type=float, default=0.2,
+                      help="brightness/contrast/saturation jitter strength, 0 disables")
+    data.add_argument("--no-augment", action="store_true", help="disable all train-time augmentation")
 
     opt = p.add_argument_group("optimisation")
     opt.add_argument("--epochs", type=int, default=100)
@@ -127,7 +134,13 @@ def set_seed(seed: int) -> None:
 
 def make_loader(args: argparse.Namespace, split: str) -> DataLoader:
     root = args.data_root / args.dataset
-    augment = AugmentConfig(enabled=(split == "train"))
+    augment = AugmentConfig(
+        enabled=(split == "train" and not args.no_augment),
+        hflip_prob=args.hflip_prob,
+        rotate_deg=args.rotate_deg,
+        scale_range=(args.scale_min, args.scale_max),
+        color_jitter=args.color_jitter,
+    )
     dataset = CHDDataset(root, split, img_size=args.img_size, augment=augment, require_pose=not args.no_pose)
     if args.limit:
         dataset = Subset(dataset, list(range(min(args.limit, len(dataset)))))
