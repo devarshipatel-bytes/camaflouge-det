@@ -22,7 +22,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from chd.models.aer import AER
-from chd.models.backbone import FEATURE_CHANNELS, build_backbone
+from chd.models.backbone import build_backbone
 from chd.models.decoder import PDCDecoder
 from chd.models.fdm import FDM
 from chd.models.heads import EdgeHead, PresenceGate, SideHeads
@@ -42,10 +42,11 @@ class CHDNet(nn.Module):
     ) -> None:
         super().__init__()
         self.backbone = build_backbone(backbone, pretrained=pretrained)
+        feature_channels = self.backbone.feature_channels
 
         self.reduce = nn.ModuleList([
             nn.Sequential(nn.Conv2d(c, channels, kernel_size=1), nn.BatchNorm2d(channels), nn.ReLU(inplace=True))
-            for c in FEATURE_CHANNELS
+            for c in feature_channels
         ])
         self.fdm = nn.ModuleList([FDM(channels) for _ in range(N_LEVELS)])
         self.sfa = nn.ModuleList([SFA(channels) for _ in range(N_LEVELS)])
@@ -55,7 +56,7 @@ class CHDNet(nn.Module):
         self.decoder = PDCDecoder(channels)
         self.side_heads = SideHeads(channels, N_LEVELS)
         self.edge_head = EdgeHead(channels)
-        self.presence_gate = PresenceGate(in_channels=FEATURE_CHANNELS[-1])
+        self.presence_gate = PresenceGate(in_channels=feature_channels[-1])
 
     def forward(
         self, image: torch.Tensor, pose: torch.Tensor, return_intermediates: bool = False,

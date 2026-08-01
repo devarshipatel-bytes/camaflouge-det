@@ -44,6 +44,7 @@ from chd.losses import CHDLoss  # noqa: E402
 from chd.metrics import mae as compute_mae  # noqa: E402
 from chd.metrics import s_measure  # noqa: E402
 from chd.models.chdnet import CHDNet  # noqa: E402
+from chd.models.factory import ARCHITECTURES, build_model, describe_model  # noqa: E402
 
 DATASETS = ("acd1k", "cpd1k", "camo_human", "mhcd", "combined")
 
@@ -88,11 +89,23 @@ def build_parser() -> argparse.ArgumentParser:
     opt.add_argument("--grad-clip", type=float, default=0.5, help="0 disables clipping")
 
     model_g = p.add_argument_group("model")
-    model_g.add_argument("--backbone", default="res2net50_26w_4s", choices=("res2net50_26w_4s", "tiny_test"))
+    model_g.add_argument("--architecture", default="chdnet", choices=ARCHITECTURES,
+                         help="chdnet = the custom FDM/SFA/OSNeck/AER design (default); "
+                              "pretrained_unet = off-the-shelf pretrained U-Net baseline")
+    model_g.add_argument("--backbone", default="res2net50_26w_4s",
+                         choices=("res2net50_26w_4s", "pvtv2_b2", "tiny_test"),
+                         help="encoder for --architecture chdnet. res2net50_26w_4s = original; "
+                              "pvtv2_b2 = the transformer encoder the FSCL paper uses")
     model_g.add_argument("--no-pretrained", action="store_true", help="random-init backbone instead of ImageNet")
     model_g.add_argument("--freeze-bn-epochs", type=int, default=5,
                          help="keep backbone BatchNorm running stats frozen for the first N epochs")
     model_g.add_argument("--os-streams", type=int, default=4, help="number of OSBlock omni-scale streams")
+    model_g.add_argument("--unet-encoder", default="resnet34",
+                         help="encoder for --architecture pretrained_unet (any smp encoder name)")
+    model_g.add_argument("--unet-freeze-encoder", dest="unet_freeze_encoder", action="store_true", default=True,
+                         help="train only the U-Net decoder + heads (default; 'minor layer fine-tuning')")
+    model_g.add_argument("--no-unet-freeze-encoder", dest="unet_freeze_encoder", action="store_false",
+                         help="fine-tune the whole U-Net encoder too")
 
     loss_g = p.add_argument_group("loss")
     loss_g.add_argument("--side-weights", type=float, nargs=4, default=[0.4, 0.6, 0.8, 1.0])
@@ -206,8 +219,13 @@ def is_oom_error(exc: Exception) -> bool:
     return isinstance(exc, oom_type) or "out of memory" in str(exc).lower()
 
 
-def set_backbone_bn_frozen(model: CHDNet, frozen: bool) -> None:
-    for module in model.backbone.modules():
+def set_backbone_bn_frozen(model: nn.Module, frozen: bool) -> None:
+    # pretrained_unet keeps its encoder under .net.encoder and manages its own
+    # freezing in .train(); only chdnet exposes a .backbone to walk here.
+    backbone = getattr(model, "backbone", None)
+    if backbone is None:
+        return
+    for module in backbone.modules():
         if isinstance(module, nn.BatchNorm2d):
             module.eval() if frozen else module.train()
             module.weight.requires_grad_(not frozen)
@@ -298,12 +316,10 @@ def gpu_memory_str(device: str) -> str:
 
 
 def print_run_header(args: argparse.Namespace, model: nn.Module, train_loader, val_loader) -> None:
-    n_params = sum(p.numel() for p in model.parameters())
     effective_batch = args.batch_size * args.accum_steps
     print("=" * 78)
     print(f"  dataset       {args.dataset}   (train={len(train_loader.dataset)} val={len(val_loader.dataset)})")
-    print(f"  backbone      {args.backbone}  ({n_params/1e6:.2f}M params, "
-          f"pretrained={not args.no_pretrained})")
+    print(f"  model         {describe_model(model, args)}  pretrained={not args.no_pretrained}")
     print(f"  image size    {args.img_size}px   multi-scale={args.multi_scale}")
     print(f"  batch size    {args.batch_size} x {args.accum_steps} accum = {effective_batch} effective")
     print(f"  optimiser     {args.optimizer}  lr={args.lr:.1e} (backbone x{args.backbone_lr_mult})  "
@@ -465,7 +481,7 @@ def run_validation(model, loader, args) -> dict:
         pose = pose.to(args.device)
 
         outputs = model(image, pose)
-        pred = CHDNet.predict_mask(outputs).cpu().numpy()
+        pred = model.predict_mask(outputs).cpu().numpy()
         gt = mask.cpu().numpy()
 
         for i in range(pred.shape[0]):
@@ -493,7 +509,7 @@ def main() -> None:
     train_loader = make_loader(args, "train")
     val_loader = make_loader(args, "val")
 
-    model = CHDNet(backbone=args.backbone, pretrained=not args.no_pretrained, os_streams=args.os_streams)
+    model = build_model(args)
     model.to(args.device)
 
     if args.auto_batch:
@@ -531,6 +547,22 @@ def main() -> None:
         # (never an untrusted download) and stores an argparse.Namespace with
         # Path objects inside, which the default weights_only=True rejects.
         ckpt = torch.load(resume_path, map_location=args.device, weights_only=False)
+
+        # Catch an architecture/backbone mismatch here with a readable message.
+        # Without this, load_state_dict still fails (safely) but buries the
+        # cause under a ~47KB wall of missing-key names.
+        saved = ckpt.get("args", {})
+        for flag, current in (("architecture", getattr(args, "architecture", "chdnet")),
+                              ("backbone", args.backbone),
+                              ("unet_encoder", getattr(args, "unet_encoder", None))):
+            was = saved.get(flag)
+            if was is not None and was != current:
+                raise SystemExit(
+                    f"checkpoint {resume_path} was trained with --{flag.replace('_', '-')} {was!r}, "
+                    f"but this run specifies {current!r}. Re-run with --{flag.replace('_', '-')} {was!r}, "
+                    "or point --out/--resume at a different directory to start a fresh run."
+                )
+
         model.load_state_dict(ckpt["model"])
         optimizer.load_state_dict(ckpt["optimizer"])
         if scheduler is not None and ckpt.get("scheduler"):
