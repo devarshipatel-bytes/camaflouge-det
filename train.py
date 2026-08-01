@@ -230,18 +230,30 @@ class EMA:
 
 
 def auto_shrink_batch_size(args: argparse.Namespace, model: nn.Module, device: str) -> int:
-    """Halve --batch-size until one forward+backward step fits in free VRAM."""
+    """Halve --batch-size until one forward+backward step fits in free VRAM.
+
+    Probes at the *largest* resolution --multi-scale can actually produce,
+    not just --img-size — training steps get batch_resize()'d up to
+    img_size * max(multi_scale) (rounded to a multiple of 32), which needs
+    roughly (scale**2) more memory. Probing at img_size alone would approve
+    a batch size that later OOMs (or, on Windows, silently spills into slow
+    shared system memory) the first time multi-scale picks its top factor.
+    """
     if device != "cuda":
         return args.batch_size
     batch_size = args.batch_size
     criterion = CHDLoss()
+    probe_size = max(32, int(round(args.img_size * max(args.multi_scale) / 32.0)) * 32)
+    if probe_size != args.img_size:
+        print(f"[auto-batch] probing at {probe_size}px (img_size={args.img_size} x "
+              f"max multi-scale={max(args.multi_scale)}), not just the base img-size")
     while batch_size >= 1:
         try:
             torch.cuda.empty_cache()
             torch.cuda.reset_peak_memory_stats()
-            image = torch.randn(batch_size, 3, args.img_size, args.img_size, device=device)
-            pose = torch.zeros(batch_size, 17, args.img_size // 4, args.img_size // 4, device=device)
-            mask = torch.zeros(batch_size, 1, args.img_size, args.img_size, device=device)
+            image = torch.randn(batch_size, 3, probe_size, probe_size, device=device)
+            pose = torch.zeros(batch_size, 17, probe_size // 4, probe_size // 4, device=device)
+            mask = torch.zeros(batch_size, 1, probe_size, probe_size, device=device)
             with torch.autocast(device_type="cuda", enabled=args.amp):
                 out = model(image, pose)
                 loss = criterion(out, mask, mask, torch.zeros(batch_size, device=device))["total"]
@@ -249,7 +261,7 @@ def auto_shrink_batch_size(args: argparse.Namespace, model: nn.Module, device: s
             model.zero_grad(set_to_none=True)
             del image, pose, mask, out, loss
             torch.cuda.empty_cache()
-            print(f"[auto-batch] batch_size={batch_size} fits "
+            print(f"[auto-batch] batch_size={batch_size} fits at {probe_size}px "
                   f"(peak {torch.cuda.max_memory_allocated()/1e9:.2f} GB)")
             return batch_size
         except RuntimeError as exc:
