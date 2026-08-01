@@ -1,11 +1,13 @@
 # Raw datasets (large, provided out-of-band)
-dataset
-
-# Generated artefacts
-data/
-runs/
-reports/
-outputs/
+# Leading slash anchors these to the repo root — without it, a bare
+# "data/" also matches src/chd/data/ (the Python subpackage) at any depth
+# and silently excludes it from every `git add`, which is exactly what
+# happened here: the pushed commit was missing src/chd/data/ entirely.
+/dataset
+/data/
+/runs/
+/reports/
+/outputs/
 
 # Model weights & caches
 *.pth
