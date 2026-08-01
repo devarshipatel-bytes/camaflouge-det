@@ -1,0 +1,28 @@
+# Raw datasets (large, provided out-of-band)
+dataset
+
+# Generated artefacts
+data/
+runs/
+reports/
+outputs/
+
+# Model weights & caches
+*.pth
+*.pt
+*.onnx
+!requirements.txt
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store

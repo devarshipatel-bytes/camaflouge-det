@@ -1,0 +1,31 @@
+# Core (torch is already present as 2.11.0+cu130; pinned loosely so the
+# 16GB training box can resolve a matching CUDA build).
+torch>=2.4
+torchvision>=0.19
+
+# Model / training
+timm>=1.0.9              # res2net50_26w_4s ImageNet weights
+einops>=0.8
+
+# Data & imaging
+numpy>=1.26
+pillow>=10.2
+scipy>=1.11              # morphology + connected components (no cv2 needed)
+opencv-python>=4.10
+albumentations>=1.4
+pandas>=2.2
+
+# Label generation (preprocessing only, not needed at train time)
+ultralytics>=8.3         # MobileSAM / SAM2 box-prompted masks, YOLO11 pose
+transformers>=4.44       # CLIP human-vs-animal scoring for the CAMO subset
+
+# Metrics, viz, reporting
+matplotlib>=3.8
+seaborn>=0.13
+torchinfo>=1.8
+tqdm>=4.66
+pyyaml>=6.0
+tensorboard>=2.17
+
+# Tests
+pytest>=8.0
