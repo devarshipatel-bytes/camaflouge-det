@@ -15,6 +15,8 @@ from __future__ import annotations
 import torch
 from torch import nn
 
+from chd._compat import zip_strict
+
 FEATURE_CHANNELS = (256, 512, 1024, 2048)  # F1..F4
 
 
@@ -51,7 +53,7 @@ class TinyTestBackbone(nn.Module):
         in_ch = 3
         self.stages = nn.ModuleList()
         stride = [4, 2, 2, 2]
-        for out_ch, s in zip(FEATURE_CHANNELS, stride, strict=True):
+        for out_ch, s in zip_strict(FEATURE_CHANNELS, stride):
             self.stages.append(nn.Sequential(
                 nn.Conv2d(in_ch, out_ch, kernel_size=3, stride=s, padding=1),
                 nn.BatchNorm2d(out_ch),

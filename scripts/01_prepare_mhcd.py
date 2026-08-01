@@ -44,6 +44,7 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from chd._compat import zip_strict  # noqa: E402
 from chd.data.manifest import DatasetWriter, count_components, image_size, load_rgb  # noqa: E402
 
 PERSON_CLASS = 0
@@ -357,7 +358,7 @@ def main() -> None:
             continue
 
         per_box, reasons = [], []
-        for index, (raw, box) in enumerate(zip(raw_masks.data.cpu().numpy(), boxes, strict=True)):
+        for index, (raw, box) in enumerate(zip_strict(raw_masks.data.cpu().numpy(), boxes)):
             mask = clean_mask(to_bool_mask(raw, height, width), args.qc_speckle_frac)
             reason = qc_mask(mask, box, args)
             qc_rows.append({

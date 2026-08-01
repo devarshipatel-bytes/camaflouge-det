@@ -43,6 +43,7 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from chd._compat import zip_strict  # noqa: E402
 from chd.data.manifest import (  # noqa: E402
     DatasetWriter,
     binarize,
@@ -231,7 +232,7 @@ def stage_auto(args: argparse.Namespace) -> None:
             probs = logits.softmax(dim=-1).cpu().numpy()
         # average the two views back into one probability per sample
         paired = probs.reshape(len(pending), 2, -1).mean(axis=1)
-        for (row, _, _), prob in zip(pending, paired, strict=True):
+        for (row, _, _), prob in zip_strict(pending, paired):
             row["clip_human"] = round(float(prob[:n_human].sum()), 5)
             row["clip_top_nonhuman"] = NON_HUMAN_PROMPTS[int(prob[n_human:].argmax())]
             rows.append(row)
@@ -249,9 +250,8 @@ def stage_auto(args: argparse.Namespace) -> None:
         if detector is not None:
             gt_box = mask_bbox(mask)
             result = detector(sample["image"], classes=[0], conf=0.10, verbose=False)[0]
-            for box, conf in zip(
-                result.boxes.xyxy.tolist(), result.boxes.conf.tolist(), strict=True
-            ):
+            for box, conf in zip_strict(
+                result.boxes.xyxy.tolist(), result.boxes.conf.tolist()):
                 iou = box_iou(tuple(box), gt_box)
                 if iou > det_iou:
                     det_conf, det_iou = float(conf), iou

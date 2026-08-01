@@ -16,6 +16,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from chd._compat import zip_strict
+
 
 def boundary_weight(mask: torch.Tensor, kernel_size: int = 31) -> torch.Tensor:
     """Per-pixel weight emphasising the boundary band of a binary mask.
@@ -90,7 +92,7 @@ class CHDLoss(nn.Module):
         final = weighted_bce_iou(outputs["mask_logit"], mask_target)
         side = sum(
             w * weighted_bce_iou(logit, mask_target)
-            for w, logit in zip(self.side_weights, outputs["side_logits"], strict=True)
+            for w, logit in zip_strict(self.side_weights, outputs["side_logits"])
         )
 
         # Edge loss is computed per-sample then masked, not skipped by

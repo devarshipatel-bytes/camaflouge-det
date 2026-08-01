@@ -37,6 +37,7 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from chd._compat import zip_strict  # noqa: E402
 from chd.data.manifest import SPLITS, image_size, read_split  # noqa: E402
 
 DATASETS = ("acd1k", "cpd1k", "camo_human", "mhcd")
@@ -60,7 +61,7 @@ def render_heatmaps(keypoints_xy: np.ndarray, keypoints_conf: np.ndarray,
 
     scale_x, scale_y = out_w / orig_w, out_h / orig_h
     yy, xx = np.mgrid[0:out_h, 0:out_w]
-    for person_xy, person_conf in zip(keypoints_xy, keypoints_conf, strict=True):
+    for person_xy, person_conf in zip_strict(keypoints_xy, keypoints_conf):
         for k in range(N_KEYPOINTS):
             conf = float(person_conf[k])
             if conf <= 0.05:
@@ -110,7 +111,7 @@ def main() -> None:
                 [str(p) for p in paths], conf=args.conf, classes=[0],
                 device=args.device, verbose=False,
             )
-            for stem, path, result in zip(batch, paths, results, strict=True):
+            for stem, path, result in zip_strict(batch, paths, results):
                 h, w = image_size(path)
                 if result.keypoints is not None and len(result.keypoints.xy):
                     xy = result.keypoints.xy.cpu().numpy()

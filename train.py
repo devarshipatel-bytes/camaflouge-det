@@ -38,6 +38,7 @@ from torch.utils.data import DataLoader, Subset
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
+from chd._compat import zip_strict  # noqa: E402
 from chd.data.dataset import AugmentConfig, CHDDataset, batch_resize, collate  # noqa: E402
 from chd.losses import CHDLoss  # noqa: E402
 from chd.metrics import mae as compute_mae  # noqa: E402
@@ -209,9 +210,9 @@ class EMA:
 
     @torch.no_grad()
     def update(self, model: nn.Module) -> None:
-        for shadow_p, p in zip(self.shadow.parameters(), model.parameters(), strict=True):
+        for shadow_p, p in zip_strict(self.shadow.parameters(), model.parameters()):
             shadow_p.mul_(self.decay).add_(p.detach(), alpha=1 - self.decay)
-        for shadow_b, b in zip(self.shadow.buffers(), model.buffers(), strict=True):
+        for shadow_b, b in zip_strict(self.shadow.buffers(), model.buffers()):
             shadow_b.copy_(b)
 
 

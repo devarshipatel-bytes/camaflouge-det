@@ -12,6 +12,8 @@ from __future__ import annotations
 import numpy as np
 from scipy import ndimage
 
+from chd._compat import zip_strict
+
 EPS = 1e-8
 
 
@@ -133,7 +135,7 @@ def _s_region(pred: np.ndarray, gt: np.ndarray) -> float:
         (slice(cy, h), slice(0, cx)), (slice(cy, h), slice(cx, w)),
     ]
     score = 0.0
-    for weight, sl in zip(weights, slices, strict=True):
+    for weight, sl in zip_strict(weights, slices):
         score += weight * _ssim_patch(pred[sl], gt[sl])
     return score
 

@@ -41,6 +41,7 @@ from PIL import Image  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from chd._compat import zip_strict  # noqa: E402
 from chd.data.manifest import mask_bbox  # noqa: E402
 from chd.viz.colors import COMBINED_HATCH, DATASET_COLOR, DATASET_LABEL, HUMAN_PAIR, INK, SPLIT_COLOR  # noqa: E402
 
@@ -106,7 +107,7 @@ def fig_composition(data_root: Path, out: Path) -> dict:
     excluded = [stats[n]["excluded"] for n in names]
     ax.bar(x, kept, width=0.6, color=HUMAN_PAIR[0], label="Human / kept")
     ax.bar(x, excluded, width=0.6, bottom=kept, color=HUMAN_PAIR[1], label="Non-human / excluded")
-    for i, (k, e) in enumerate(zip(kept, excluded, strict=True)):
+    for i, (k, e) in enumerate(zip_strict(kept, excluded)):
         if e:
             ax.text(i, k + e + max(kept) * 0.01, f"{k}/{k+e}", ha="center", va="bottom", fontsize=9)
         else:
@@ -137,7 +138,7 @@ def fig_splits(data_root: Path, out: Path) -> dict:
     for split in ("train", "val", "test"):
         heights = [counts[n].get(split, 0) for n in names]
         bars = ax.bar(x, heights, width=0.6, bottom=bottoms, color=SPLIT_COLOR[split], label=split)
-        for xi, h, b in zip(x, heights, bottoms, strict=True):
+        for xi, h, b in zip_strict(x, heights, bottoms):
             if h:
                 ax.text(xi, b + h / 2, str(h), ha="center", va="center", fontsize=8, color="white")
         bottoms += np.array(heights)
@@ -158,7 +159,7 @@ def fig_foreground_area(data_root: Path, out: Path) -> dict:
     fig, axes = plt.subplots(1, len(SOURCE_DATASETS), figsize=(15, 3.4), sharey=True)
     stats = {}
     bins = np.logspace(np.log10(0.001), np.log10(1.0), 30)
-    for ax, name in zip(axes, SOURCE_DATASETS, strict=True):
+    for ax, name in zip_strict(axes, SOURCE_DATASETS):
         meta = [r for r in load_meta(data_root / name) if not r["is_negative"]]
         fracs = np.array([r["fg_frac"] for r in meta if r["fg_frac"] > 0])
         ax.hist(fracs, bins=bins, color=DATASET_COLOR[name])
@@ -341,7 +342,7 @@ def fig_mhcd_qc(data_root: Path, out: Path) -> dict:
     bars = ax.bar(order, values, color=colors)
     ax.set_ylabel("Number of person boxes")
     ax.set_title(f"MHCD SAM pseudo-mask QC ({accepted}/{len(rows)} = {accepted/len(rows):.1%} accepted)")
-    for b, v in zip(bars, values, strict=True):
+    for b, v in zip_strict(bars, values):
         ax.text(b.get_x() + b.get_width() / 2, v + max(values) * 0.01, str(v), ha="center", va="bottom", fontsize=8)
     plt.setp(ax.get_xticklabels(), rotation=25, ha="right")
     clean_spines(ax)
@@ -364,7 +365,7 @@ def fig_preprocessing_strip(data_root: Path, name: str, out: Path, n_rows: int =
     if len(sample) == 1:
         axes = axes[None, :]
 
-    for row_ax, row in zip(axes, sample, strict=True):
+    for row_ax, row in zip_strict(axes, sample):
         stem = row["stem"]
         image = np.asarray(Image.open(root / "images" / f"{stem}.jpg").convert("RGB"))
         mask = np.asarray(Image.open(root / "masks" / f"{stem}.png").convert("L"))
@@ -378,9 +379,9 @@ def fig_preprocessing_strip(data_root: Path, name: str, out: Path, n_rows: int =
 
         resized = np.asarray(Image.fromarray(image).resize((img_size, img_size), Image.BILINEAR))
 
-        for ax, content, is_gray in zip(
+        for ax, content, is_gray in zip_strict(
             row_ax, (image, mask, overlay, edge, pose, resized),
-            (False, True, False, True, "heat", False), strict=True,
+            (False, True, False, True, "heat", False),
         ):
             if is_gray == "heat":
                 ax.imshow(content, cmap="inferno", vmin=0, vmax=1)
@@ -392,7 +393,7 @@ def fig_preprocessing_strip(data_root: Path, name: str, out: Path, n_rows: int =
             ax.set_yticks([])
         row_ax[0].set_ylabel(stem, fontsize=7)
 
-    for ax, title in zip(axes[0], cols, strict=True):
+    for ax, title in zip(axes[0], cols):
         ax.set_title(title, fontsize=10)
     fig.subplots_adjust(top=0.94, hspace=0.06, wspace=0.05)
     fig.suptitle(f"{DATASET_LABEL[name]} — preprocessing pipeline sample", y=0.97, fontsize=13)

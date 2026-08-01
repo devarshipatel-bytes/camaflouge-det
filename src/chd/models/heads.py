@@ -13,6 +13,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from chd._compat import zip_strict
+
 
 class SideHeads(nn.Module):
     """One 1x1-conv logit per decoder level, each upsampled to the input size."""
@@ -23,7 +25,7 @@ class SideHeads(nn.Module):
 
     def forward(self, feats: tuple[torch.Tensor, ...], out_size: tuple[int, int]) -> list[torch.Tensor]:
         return [F.interpolate(head(feat), size=out_size, mode="bilinear", align_corners=False)
-                for head, feat in zip(self.heads, feats, strict=True)]
+                for head, feat in zip_strict(self.heads, feats)]
 
 
 class EdgeHead(nn.Module):
