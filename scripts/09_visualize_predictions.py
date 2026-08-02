@@ -270,11 +270,35 @@ def fig_progression(bundles: list, records: list[dict], args, out: Path) -> None
     panels.save_figure(fig, out, "progression")
 
 
+def _cpu_intermediates(intermediates: dict) -> dict:
+    """Detach and move every intermediate tensor to CPU before storing it on a record.
+
+    Only ``fig_activations`` reads these back, and ``channel_heat`` moves to
+    CPU internally anyway, so nothing downstream changes. ``fig_gradcam_levels``
+    and ``fig_progression`` each recompute their own forward/backward pass and
+    never touch this copy. Left on the GPU, this dict would sit resident for
+    the whole run — at the training machine's real img_size that is roughly
+    100MB per image — dead weight through two later passes that allocate their
+    own gradient buffers concurrently.
+    """
+    return {key: [t.detach().cpu() for t in tensors] for key, tensors in intermediates.items()}
+
+
 def gather_records(bundle, args, stems: list[str], dataset: CHDDataset) -> list[dict]:
-    """Everything each figure row needs, computed once per image."""
+    """Everything each figure row needs, computed once per image.
+
+    ``no_pose`` runs are architecturally identical to pose-enabled ones —
+    ``build_model`` always wires up the AER pose path — so ``--no-pose`` is a
+    convention enforced at the call site, exactly as ``chd.eval.predict``
+    enforces it: the pose tensor is zeroed here before it ever reaches the
+    model or Grad-CAM, so every figure for a ``--no-pose`` run reflects the
+    same zero-pose input distribution the network was trained and evaluated
+    on, not real pose heatmaps it never saw in training.
+    """
     predictions = {p.stem: p for p in predict_run(
         bundle, split=args.split, data_root=args.data_root, device=args.device, stems=stems)}
     by_stem = {stem: index for index, stem in enumerate(dataset.stems)}
+    zero_pose = bool(getattr(bundle.config, "no_pose", False))
 
     records: list[dict] = []
     for stem in stems:
@@ -283,6 +307,8 @@ def gather_records(bundle, args, stems: list[str], dataset: CHDDataset) -> list[
         item = dataset[by_stem[stem]]
         image_tensor = item["image"].unsqueeze(0)
         pose_tensor = item["pose"].unsqueeze(0)
+        if zero_pose:
+            pose_tensor = torch.zeros_like(pose_tensor)
         with torch.no_grad():
             outputs = bundle.model(image_tensor.to(args.device), pose_tensor.to(args.device),
                                    return_intermediates=True)
@@ -302,7 +328,7 @@ def gather_records(bundle, args, stems: list[str], dataset: CHDDataset) -> list[
             "prob": cv2.resize(prediction.prob, (width, height), interpolation=cv2.INTER_LINEAR),
             "gt": item["mask"][0].numpy(),
             "presence": prediction.presence,
-            "intermediates": outputs["intermediates"],
+            "intermediates": _cpu_intermediates(outputs["intermediates"]),
         })
     return records
 
