@@ -43,3 +43,9 @@ HUMAN_PAIR = ("#0072B2", "#B0B0B0")  # human, non-human/excluded
 SEQUENTIAL = "Blues"
 
 INK = {"primary": "#1a1a1a", "secondary": "#595959", "muted": "#8c8c8c", "grid": "#e0e0e0"}
+
+#: False-positive / false-negative / true-positive colors for the error panel
+#: in the qualitative figure. FP is Okabe-Ito vermillion, FN is the same blue
+#: already used for acd1k/train, TP is a neutral gray so correct pixels never
+#: compete for attention with mistakes.
+ERROR_COLOR = {"fp": "#D55E00", "fn": "#0072B2", "tp": "#B0B0B0"}
