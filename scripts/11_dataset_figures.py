@@ -38,10 +38,16 @@ import numpy as np  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from chd.data.manifest import load_gray, load_rgb, read_split  # noqa: E402
-from chd.viz.colors import DATASET_LABEL, DATASET_ORDER, INK  # noqa: E402
+from chd.viz.colors import DATASET_LABEL, DATASET_ORDER, ERROR_COLOR, INK  # noqa: E402
 from chd.viz.panels import component_bboxes, save_figure  # noqa: E402
 
-BOX_COLOR = "#D55E00"
+#: Target boxes reuse the palette's false-positive orange — one shared source
+#: of truth, so the box colour cannot drift away from the figure palette.
+BOX_COLOR = ERROR_COLOR["fp"]
+
+#: Matches scripts/06_visualize_datasets.py, which writes into this same
+#: reports/datasets/ directory; panels.save_figure otherwise defaults to 180.
+FIGURE_DPI = 200
 
 
 def pick_stems(root: Path, split: str, count: int, seed: int) -> list[str]:
@@ -65,7 +71,7 @@ def fig_collage(root: Path, name: str, stems: list[str], rows: int, cols: int, o
     fig.suptitle(f"{DATASET_LABEL.get(name, name)} — sample images",
                  fontsize=12, color=INK["primary"], y=0.998)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
-    save_figure(fig, out, f"collage_{name}")
+    save_figure(fig, out, f"collage_{name}", dpi=FIGURE_DPI)
 
 
 def fig_annotated(root: Path, name: str, stems: list[str], min_area_frac: float, out: Path) -> None:
@@ -94,7 +100,7 @@ def fig_annotated(root: Path, name: str, stems: list[str], min_area_frac: float,
     fig.suptitle(f"{DATASET_LABEL.get(name, name)} — image, target box, ground-truth mask",
                  fontsize=12, color=INK["primary"], y=0.998)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
-    save_figure(fig, out, f"annotated_{name}")
+    save_figure(fig, out, f"annotated_{name}", dpi=FIGURE_DPI)
 
 
 def main() -> None:

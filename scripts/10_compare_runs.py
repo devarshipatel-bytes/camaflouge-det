@@ -61,6 +61,12 @@ def write_comparison_csv(summaries: list[dict], path: Path) -> None:
         writer = csv.DictWriter(fh, fieldnames=fields)
         writer.writeheader()
         for summary in summaries:
+            presence = summary.get("presence", {})
+            # Single-class splits (every dataset except mhcd/combined) have an
+            # empty half of the confusion matrix, so their gate rates are not
+            # measurable. Leave the cells blank rather than writing a number
+            # that would sit in the same column as mhcd's genuine values.
+            single_class = bool(presence.get("presence_single_class"))
             row = {
                 "run": summary["_run"],
                 "dataset": summary.get("dataset"),
@@ -69,8 +75,8 @@ def write_comparison_csv(summaries: list[dict], path: Path) -> None:
                 "img_size": summary.get("img_size"),
                 "weights": summary.get("weights"),
                 "n_positives": summary.get("n_positives"),
-                "presence_accuracy": summary["presence"].get("presence_accuracy"),
-                "presence_auc": summary["presence"].get("presence_auc"),
+                "presence_accuracy": None if single_class else presence.get("presence_accuracy"),
+                "presence_auc": None if single_class else presence.get("presence_auc"),
             }
             row.update({m: summary["mask"].get(m) for m in MASK_METRICS})
             writer.writerow(row)
@@ -120,8 +126,10 @@ def main() -> None:
 
     print(f"[compare] {len(summaries)} evaluated run(s):")
     for summary in summaries:
-        print(f"    {summary['_run']:<24} dataset={summary.get('dataset'):<12} "
-              f"S_alpha={summary['mask'].get('S_alpha', float('nan')):.4f}")
+        gate = "" if not summary.get("presence", {}).get("presence_single_class") else \
+            "  (single-class split: presence gate n/a)"
+        print(f"    {summary['_run']:<24} dataset={summary.get('dataset') or '?':<12} "
+              f"S_alpha={summary['mask'].get('S_alpha', float('nan')):.4f}{gate}")
 
     write_comparison_csv(summaries, args.out / "comparison.csv")
     for metric in args.metrics:

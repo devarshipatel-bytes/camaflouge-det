@@ -39,7 +39,6 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import cv2  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
@@ -47,7 +46,7 @@ import torch  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from chd.data.dataset import AugmentConfig, CHDDataset  # noqa: E402
-from chd.eval.predict import predict_run  # noqa: E402
+from chd.eval.predict import predict_run, resize_prob  # noqa: E402
 from chd.eval.runs import DEFAULT_RUNS_ROOT, load_run  # noqa: E402
 from chd.viz import cam as camlib  # noqa: E402
 from chd.viz import panels  # noqa: E402
@@ -68,7 +67,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--run", required=True)
     p.add_argument("--also-run", action="append", default=[],
-                   help="repeatable; adds one ablation column per extra run to the progression figure")
+                   help="repeatable; adds one ablation column per extra run to the progression "
+                        "figure. Each extra run must share the primary run's dataset and img_size, "
+                        "because it is scored on the primary run's input tensors.")
     p.add_argument("--runs-root", type=Path, default=DEFAULT_RUNS_ROOT)
     p.add_argument("--prefer", choices=("best", "last"), default="best")
     p.add_argument("--split", default="test")
@@ -219,46 +220,55 @@ def fig_activations(bundle, records: list[dict], args, out: Path, run_label: str
 
 
 def fig_progression(bundles: list, records: list[dict], args, out: Path) -> None:
-    """Within-network module progression, or one column per run when --also-run is given."""
-    ablation = len(bundles) > 1
-    if ablation:
-        column_labels = [b.name for b in bundles]
-    else:
-        column_labels = [
-            label for label, key in camlib.PROGRESSION_TAPS
-            if records[0]["intermediates"].get(key)
-        ]
+    """Within-network module progression, or one column per run when --also-run is given.
 
-    fig, axes = grid(len(records), 1 + len(column_labels))
-    for row, record in enumerate(records):
+    Column labels come from whatever produced the heatmaps, never from a
+    separately recomputed predicate. ``grad_cam_progression`` decides which
+    module boundaries exist for this architecture — it also requires
+    ``level < len(tensors)``, which a bare ``intermediates.get(key)`` check
+    does not — so re-deriving labels here could hand ``zip`` two lists of
+    different lengths and silently label every heatmap with the wrong module.
+    """
+    ablation = len(bundles) > 1
+
+    def columns_for(record: dict) -> list[tuple[str, np.ndarray]]:
+        """``(label, heat)`` pairs for one row, labels bound to their own heat."""
+        if not ablation:
+            return camlib.grad_cam_progression(
+                bundles[0].model, record["image_tensor"].to(args.device),
+                record["pose_tensor"].to(args.device), level=args.progression_level,
+                target=args.cam_target,
+            )
+        pairs: list[tuple[str, np.ndarray]] = []
+        for bundle in bundles:
+            cams, _ = camlib.grad_cam_levels(
+                bundle.model, record["image_tensor"].to(args.device),
+                record["pose_tensor"].to(args.device),
+                tap=args.cam_tap, target=args.cam_target,
+            )
+            pairs.append((bundle.name, cams[args.progression_level]))
+        return pairs
+
+    per_row = [columns_for(record) for record in records]
+    n_cols = max((len(pairs) for pairs in per_row), default=0)
+
+    fig, axes = grid(len(records), 1 + n_cols)
+    for row, (record, pairs) in enumerate(zip(records, per_row)):
         axes[row][0].imshow(record["image"])
         bare(axes[row][0])
         if row == 0:
             axes[row][0].set_title("Input", fontsize=9)
         axes[row][0].set_ylabel(record["stem"], fontsize=7)
 
-        if ablation:
-            heats = []
-            for bundle in bundles:
-                cams, _ = camlib.grad_cam_levels(
-                    bundle.model, record["image_tensor"].to(args.device),
-                    record["pose_tensor"].to(args.device),
-                    tap=args.cam_tap, target=args.cam_target,
-                )
-                heats.append(cams[args.progression_level])
-        else:
-            heats = [heat for _, heat in camlib.grad_cam_progression(
-                bundles[0].model, record["image_tensor"].to(args.device),
-                record["pose_tensor"].to(args.device), level=args.progression_level,
-                target=args.cam_target,
-            )]
-
-        for col, (name, heat) in enumerate(zip(column_labels, heats), start=1):
+        for col, (name, heat) in enumerate(pairs, start=1):
             ax = axes[row][col]
             ax.imshow(panels.overlay_heat(record["image"], heat, cmap=args.cmap))
             bare(ax)
             if row == 0:
                 ax.set_title(name, fontsize=9)
+        for col in range(1 + len(pairs), 1 + n_cols):
+            bare(axes[row][col])
+            panels.blank_panel(axes[row][col], "n/a")
 
     mode = (
         f"cross-run ablation ({len(bundles)} runs), Grad-CAM at level {args.progression_level + 1}"
@@ -325,12 +335,41 @@ def gather_records(bundle, args, stems: list[str], dataset: CHDDataset) -> list[
             # prediction is resized down to match the rendered input. Metrics
             # are never computed from this copy — 08_evaluate.py scores the
             # native-resolution map — so resizing here cannot move a number.
-            "prob": cv2.resize(prediction.prob, (width, height), interpolation=cv2.INTER_LINEAR),
+            # Uses the same resize_prob the metric path uses, rather than a
+            # forked inline cv2.resize, so the two can never drift apart.
+            "prob": resize_prob(prediction.prob, (height, width)),
             "gt": item["mask"][0].numpy(),
             "presence": prediction.presence,
             "intermediates": _cpu_intermediates(outputs["intermediates"]),
         })
     return records
+
+
+def check_ablation_compatible(primary, extra: list) -> None:
+    """Refuse to build an ablation figure out of incomparable runs.
+
+    Every ``--also-run`` model is fed the *primary* run's ``image_tensor``,
+    which was built from the primary run's dataset at the primary run's
+    ``img_size``. A run trained at a different ``img_size`` (or on a different
+    dataset) would therefore get an out-of-distribution forward pass, and the
+    resulting Grad-CAM would be presented as an ablation column as if it were
+    a fair comparison. It is not, so this exits instead.
+    """
+    mismatched = [
+        f"    {b.name}: dataset={b.config.dataset} img_size={b.config.img_size}"
+        for b in extra
+        if b.config.dataset != primary.config.dataset or b.config.img_size != primary.config.img_size
+    ]
+    if not mismatched:
+        return
+    raise SystemExit(
+        "[viz] --also-run requires every run to share the primary run's dataset and "
+        "img_size: each extra model is scored on the primary run's input tensors, so a "
+        "mismatch would be an out-of-distribution forward pass presented as an ablation.\n"
+        f"  primary {primary.name}: dataset={primary.config.dataset} "
+        f"img_size={primary.config.img_size}\n"
+        "  incompatible:\n" + "\n".join(mismatched)
+    )
 
 
 def main() -> None:
@@ -339,11 +378,17 @@ def main() -> None:
     bundle = load_run(args.run, runs_root=args.runs_root, device=args.device, prefer=args.prefer)
     extra = [load_run(name, runs_root=args.runs_root, device=args.device, prefer=args.prefer)
              for name in args.also_run]
+    check_ablation_compatible(bundle, extra)
 
     out = args.out or Path("reports/figures") / args.run
     root = Path(args.data_root or getattr(bundle.config, "data_root", "data")) / bundle.config.dataset
+    # require_pose must mirror predict.py:73 and train.py:157. Without this a
+    # --no-pose run on a dataset with no pose cache survives predict_run (which
+    # zeroes the pose tensor) and then dies with FileNotFoundError inside
+    # gather_records, after all the inference work is already done.
     dataset = CHDDataset(root, args.split, img_size=bundle.config.img_size,
-                         augment=AugmentConfig(enabled=False))
+                         augment=AugmentConfig(enabled=False),
+                         require_pose=not bool(getattr(bundle.config, "no_pose", False)))
 
     stems = select_stems(args, dataset)
     print(f"[viz] run={bundle.name} dataset={bundle.config.dataset} weights={bundle.weights}")

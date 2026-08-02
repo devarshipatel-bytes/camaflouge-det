@@ -32,7 +32,20 @@ Two facts drive the design:
 hardcoding image size would silently degrade every reported metric.
 
 Test split sizes: acd1k 329, cpd1k 215, camo_human 112, mhcd 494, combined 1150.
-`camo_human` additionally has 1024 negatives listed in `negatives.txt`.
+
+Negatives (`is_negative` in `meta.csv`, which with `splits/` is all the eval
+pipeline reads): acd1k **0**, cpd1k **0**, camo_human **0**, mhcd **376** (69 in
+test), combined **376** (69 in test). `data/camo_human/negatives.txt` lists 1024
+stems, but none of them appear in `meta.csv` and none of their images are on
+disk (`camo_human` keeps 226 images in total, all of them positives). It is an
+*exclusion* list left over from dataset preparation, not a set of negative
+samples, and it is unreachable from the evaluation pipeline.
+
+Two consequences: only mhcd and combined can measure the presence gate at all,
+and acd1k / cpd1k / camo_human runs must report the gate's rates as *not
+measurable* rather than as the vacuous values a one-class confusion matrix
+yields (`fp == tn == 0`, so precision is trivially 1.0 and accuracy is just
+recall).
 
 The paper (`Template_ PROCS_ICMLDE/PROCS_ICMLDE2024.tex`) has `tab:sota_a`,
 `tab:sota_b`, `tab:ablation` and `fig:qualitative` all marked *"placeholders
@@ -138,10 +151,15 @@ Averaging that with real segmentation scores inflates S_alpha. Therefore:
   F_bd, IoU, Dice) are aggregated over **positives only**.
 - **Presence-gate metrics** (accuracy, precision, recall, F1, AUC at
   `sigmoid(presence_logit) > 0.5`) are computed over **all** images, positives
-  and negatives.
+  and negatives — but only when both classes are present. On an all-positive
+  split (acd1k, cpd1k, camo_human) all five rates are `None` and
+  `presence_single_class` is `True`; only the raw tp/fp/tn/fn counts are kept.
 
-Per-image rows record both, plus an `is_negative` column, so any other
-aggregation can be recomputed without re-running the model.
+Per-image rows record both, plus `is_negative` (from `meta.csv`) and
+`gt_positive` (measured from the scored mask), so any other aggregation can be
+recomputed without re-running the model. A row is treated as a positive only
+when both agree, so a mislabelled empty ground truth cannot slip into the mask
+means.
 
 ### Performance
 

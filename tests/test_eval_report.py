@@ -1,9 +1,14 @@
 """Tests for chd.eval.report — aggregation rules that affect published numbers.
 
-The rule being pinned hardest: mask metrics average over positives only.
-An empty ground truth sends s_measure down its y == 0 branch, where it
-returns 1 - pred.mean() — a presence score, not a segmentation score.
-Averaging that in would inflate S_alpha, and camo_human has 1024 negatives.
+Two rules are pinned hardest here:
+
+1. Mask metrics average over positives only. An empty ground truth sends
+   s_measure down its y == 0 branch, where it returns 1 - pred.mean() — a
+   presence score, not a segmentation score. Averaging that in would inflate
+   S_alpha. mhcd (and therefore combined) carries 376 such negatives.
+2. A single-class split reports no presence rates. acd1k, cpd1k and camo_human
+   have zero negatives in meta.csv, so fp == tn == 0 and the naive precision is
+   a vacuous 1.0. Reporting that in a paper table would be a fabrication.
 """
 
 from __future__ import annotations
@@ -40,6 +45,18 @@ class TestMetricRow:
         assert row["is_negative"] == 0
         assert row["height"] == 32 and row["width"] == 32
 
+    def test_gt_positive_is_measured_from_the_mask_not_the_manifest(self) -> None:
+        assert report.metric_row(make_pred("pos"))["gt_positive"] == 1
+        assert report.metric_row(make_pred("neg", is_negative=True))["gt_positive"] == 0
+        # Manifest says positive, mask is empty: the measurement wins.
+        empty = make_pred("mislabelled", is_negative=True)
+        mislabelled = Prediction(stem="mislabelled", prob=empty.prob, gt=empty.gt,
+                                 presence=empty.presence, is_negative=False)
+        assert report.metric_row(mislabelled)["gt_positive"] == 0
+
+    def test_gt_positive_reaches_the_csv(self) -> None:
+        assert "gt_positive" in report.ROW_FIELDS
+
     def test_perfect_prediction_scores_perfectly(self) -> None:
         row = report.metric_row(make_pred("a"))
         assert row["IoU"] == pytest.approx(1.0)
@@ -59,18 +76,40 @@ class TestPresenceMetrics:
         assert out["presence_precision"] == pytest.approx(2 / 3)
         assert out["presence_recall"] == pytest.approx(1.0)
         assert out["presence_f1"] == pytest.approx(0.8)
+        assert out["presence_single_class"] is False
 
     def test_auc_is_one_for_perfectly_separated_scores(self) -> None:
         out = report.presence_metrics([0.9, 0.8, 0.2, 0.1], [False, False, True, True])
         assert out["presence_auc"] == pytest.approx(1.0)
 
-    def test_auc_is_none_without_both_classes(self) -> None:
-        out = report.presence_metrics([0.9, 0.8], [False, False])
-        assert out["presence_auc"] is None
+    def test_all_positive_split_reports_no_rates_and_never_a_fake_precision(self) -> None:
+        """acd1k / cpd1k / camo_human are all-positive in meta.csv.
+
+        With no negatives, fp == tn == 0, so the naive precision is tp/(tp+0)
+        == 1.0 for *any* gate however bad, and "accuracy" is just recall.
+        Printing those into a paper table would be a fabrication, so every rate
+        is None and the split is flagged.
+        """
+        out = report.presence_metrics([0.9, 0.8, 0.1], [False, False, False])
+        assert out["presence_single_class"] is True
+        assert out["presence_precision"] is None
+        assert out["presence_precision"] != 1.0
+        for key in ("presence_recall", "presence_f1", "presence_accuracy", "presence_auc"):
+            assert out[key] is None, key
+        # The raw counts are still facts about what happened, so they survive.
+        assert (out["presence_tp"], out["presence_fn"]) == (2, 1)
+        assert (out["presence_fp"], out["presence_tn"]) == (0, 0)
+
+    def test_all_negative_split_is_also_single_class(self) -> None:
+        out = report.presence_metrics([0.1, 0.9], [True, True])
+        assert out["presence_single_class"] is True
+        assert out["presence_precision"] is None
+        assert (out["presence_fp"], out["presence_tn"]) == (1, 1)
 
     def test_empty_input_does_not_divide_by_zero(self) -> None:
         out = report.presence_metrics([], [])
         assert out["presence_accuracy"] is None
+        assert out["presence_single_class"] is True
         assert np.isfinite(out["presence_tp"])
 
 
@@ -100,6 +139,26 @@ class TestAggregate:
         out = report.aggregate(rows)
         assert out["mask"] == {}
         assert out["n_positives"] == 0
+
+    def test_mislabelled_empty_gt_is_excluded_from_mask_means(self) -> None:
+        """is_negative says positive but the mask is empty — both flags must agree.
+
+        Otherwise s_measure's 1 - pred.mean() branch would join the positives
+        mean and inflate S_alpha.
+        """
+        empty = make_pred("mislabelled", is_negative=True)
+        rows = [
+            report.metric_row(make_pred("pos", perfect=False)),
+            report.metric_row(Prediction(stem="mislabelled", prob=empty.prob, gt=empty.gt,
+                                         presence=0.9, is_negative=False)),
+        ]
+        out = report.aggregate(rows)
+        assert out["n_positives"] == 1
+        assert out["mask"]["S_alpha"] == pytest.approx(rows[0]["S_alpha"])
+
+    def test_single_class_split_is_flagged_in_the_summary(self) -> None:
+        rows = [report.metric_row(make_pred(s)) for s in ("a", "b")]
+        assert report.aggregate(rows)["presence"]["presence_single_class"] is True
 
 
 class TestWriters:
@@ -138,3 +197,28 @@ class TestWriters:
         report.write_metrics_md(summary, path)
         text = path.read_text()
         assert "S_alpha" in text and "toy" in text
+
+    def test_metrics_md_flags_a_single_class_split_and_names_the_missing_class(
+        self, tmp_path: Path,
+    ) -> None:
+        summary = report.aggregate([report.metric_row(make_pred(s)) for s in ("a", "b")])
+        summary.update({"run": "toy", "dataset": "acd1k", "split": "test"})
+        path = tmp_path / "metrics.md"
+        report.write_metrics_md(summary, path)
+        text = path.read_text()
+        assert "only one class" in text
+        assert "negative (target-free)" in text
+        assert "| presence_precision | n/a |" in text
+        assert "| presence_precision | 1.0000 |" not in text
+
+    def test_metrics_md_has_no_single_class_note_when_both_classes_present(
+        self, tmp_path: Path,
+    ) -> None:
+        summary = report.aggregate([
+            report.metric_row(make_pred("pos", presence=0.9)),
+            report.metric_row(make_pred("neg", is_negative=True, presence=0.1)),
+        ])
+        summary.update({"run": "toy", "dataset": "mhcd", "split": "test"})
+        path = tmp_path / "metrics.md"
+        report.write_metrics_md(summary, path)
+        assert "only one class" not in path.read_text()
