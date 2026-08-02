@@ -61,17 +61,23 @@ def predict_run(
     Streaming matters: the combined test split is 1150 images, and holding
     every native-resolution probability map and mask in memory at once would
     cost several GB.
+
+    Output order follows the split file's stem order, not ``stems``' order:
+    ``predict_run(bundle, stems=["b", "a"])`` still yields ``a`` before ``b``
+    if that is the split file's order. ``stems`` only filters which images are
+    used, it does not reorder them.
     """
     root = Path(data_root or getattr(bundle.config, "data_root", "data")) / bundle.config.dataset
+    zero_pose = bool(getattr(bundle.config, "no_pose", False))
     dataset = CHDDataset(root, split, img_size=bundle.config.img_size,
-                         augment=AugmentConfig(enabled=False))
+                         augment=AugmentConfig(enabled=False), require_pose=not zero_pose)
 
     wanted = set(stems) if stems else None
     indices = [i for i, stem in enumerate(dataset.stems) if wanted is None or stem in wanted]
     if limit is not None:
         indices = indices[:limit]
 
-    zero_pose = bool(getattr(bundle.config, "no_pose", False))
+    bundle.model.to(device)
 
     for index in indices:
         item = dataset[index]

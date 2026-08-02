@@ -37,8 +37,17 @@ TINY_ARGS = {
 }
 
 
-def make_dataset(root: Path, stems: tuple[str, ...] = ("a", "b"), negatives: tuple[str, ...] = ()) -> None:
-    """Minimal on-disk dataset in the canonical prepared layout."""
+def make_dataset(
+    root: Path,
+    stems: tuple[str, ...] = ("a", "b"),
+    negatives: tuple[str, ...] = (),
+    write_pose: bool = True,
+) -> None:
+    """Minimal on-disk dataset in the canonical prepared layout.
+
+    ``write_pose=False`` omits ``pose/*.npy`` entirely, mirroring a
+    ``--no-pose`` prepared dataset that never precomputed a pose cache.
+    """
     for sub in ("images", "masks", "edges", "pose", "splits"):
         (root / sub).mkdir(parents=True, exist_ok=True)
     h, w = NATIVE_HW
@@ -50,7 +59,8 @@ def make_dataset(root: Path, stems: tuple[str, ...] = ("a", "b"), negatives: tup
             mask[20:60, 30:90] = 255
         cv2.imwrite(str(root / "masks" / f"{stem}.png"), mask)
         cv2.imwrite(str(root / "edges" / f"{stem}.png"), np.zeros((h, w), dtype=np.uint8))
-        np.save(root / "pose" / f"{stem}.npy", np.zeros((N_KEYPOINTS, h, w), dtype=np.float32))
+        if write_pose:
+            np.save(root / "pose" / f"{stem}.npy", np.zeros((N_KEYPOINTS, h, w), dtype=np.float32))
     (root / "splits" / "test.txt").write_text("\n".join(stems) + "\n")
     rows = ["stem,is_negative"] + [f"{s},{int(s in negatives)}" for s in stems]
     (root / "meta.csv").write_text("\n".join(rows) + "\n")
@@ -122,3 +132,35 @@ class TestPredictRun:
         bundle.config.no_pose = True
         items = list(predict.predict_run(bundle, data_root=tmp_path))
         assert len(items) == 2
+
+    def test_no_pose_run_evaluates_without_a_pose_cache_on_disk(self, tmp_path: Path, bundle) -> None:
+        """A --no-pose prepared dataset never precomputes pose/*.npy at all.
+
+        require_pose must be propagated from config.no_pose (mirroring
+        train.py's ``CHDDataset(..., require_pose=not args.no_pose)``), or this
+        raises FileNotFoundError instead of zeroing pose as intended.
+        """
+        make_dataset(tmp_path / "toy", write_pose=False)
+        bundle.config.no_pose = True
+        items = list(predict.predict_run(bundle, data_root=tmp_path))
+        assert len(items) == 2
+
+    def test_model_is_moved_to_the_requested_device(self, tmp_path: Path, bundle) -> None:
+        """A caller passing device=... must not hit a device-mismatch RuntimeError.
+
+        Only image/pose tensors being moved (and not bundle.model) is exactly
+        the bug this pins: a CPU-loaded bundle used with device="cuda" would
+        otherwise raise. Spying on Module.to confirms the model itself is
+        moved, not just the input tensors.
+        """
+        make_dataset(tmp_path / "toy")
+        calls: list[tuple[tuple, dict]] = []
+        original_to = bundle.model.to
+
+        def spy_to(*args, **kwargs):
+            calls.append((args, kwargs))
+            return original_to(*args, **kwargs)
+
+        bundle.model.to = spy_to
+        list(predict.predict_run(bundle, data_root=tmp_path, device="cpu"))
+        assert any(args == ("cpu",) or kwargs.get("device") == "cpu" for args, kwargs in calls)
