@@ -1850,13 +1850,28 @@ class TestGradCamLevels:
         cams, _ = cam.grad_cam_levels(model, image, pose, target="gt", gt=gt)
         assert len(cams) == 4
 
-    def test_empty_prediction_still_produces_maps(self, model, batch) -> None:
-        """Negatives predict nothing above 0.5, so the score must fall back to
-        the top-k logits rather than becoming a constant zero with no gradient."""
+    def test_empty_prediction_falls_back_to_topk_logits(self, model, batch) -> None:
+        """Negatives predict nothing above 0.5. Summing mask_logit over an empty
+        region gives a constant zero with no gradient, so cam_score must fall
+        back to the top-k logits or autograd.grad raises on an unused input.
+
+        The empty prediction is forced by driving the presence gate to zero,
+        since predict_mask multiplies the mask by the presence probability.
+        """
         image, pose = batch
         with torch.no_grad():
-            pass
+            # PresenceGate holds its layers in .net (a Sequential); .net[-1] is
+            # the final Linear. Zero every weight, then bias the logit to -30 so
+            # sigmoid(presence) ~ 1e-13 and predict_mask is everywhere < 0.5.
+            for param in model.presence_gate.parameters():
+                param.zero_()
+            model.presence_gate.net[-1].bias.fill_(-30.0)
+
+        outputs = model(image, pose, return_intermediates=True)
+        assert float((model.predict_mask(outputs) > 0.5).sum()) == 0.0, "setup failed to empty the prediction"
+
         cams, _ = cam.grad_cam_levels(model, image, pose, target="pred", topk=16)
+        assert len(cams) == 4
         assert all(np.isfinite(c).all() for c in cams)
 
     def test_model_is_left_in_eval_mode(self, model, batch) -> None:
