@@ -1,0 +1,707 @@
+% Template for Elsevier CRC journal article
+% version 1.2 dated 09 May 2011
+
+% This file (c) 2009-2011 Elsevier Ltd.  Modifications may be freely made,
+% provided the edited file is saved under a different name
+
+% This file contains modifications for Procedia Computer Science
+
+%-----------------------------------------------------------------------------------
+%% Compile with PDFLaTeX.  Run twice so that \cite numbers resolve.
+%-----------------------------------------------------------------------------------
+
+\documentclass[3p,times,procedia]{elsarticle}
+\flushbottom
+
+%% The `ecrc' package must be called to make the CRC functionality available
+\usepackage{ecrc}
+\usepackage[bookmarks=false]{hyperref}
+    \hypersetup{colorlinks,
+      linkcolor=blue,
+      citecolor=blue,
+      urlcolor=blue}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{multirow}
+
+%% The ecrc package defines commands needed for running heads and logos.
+\volume{00}
+\firstpage{1}
+\journalname{Procedia Computer Science}
+\runauth{First Author et al.}
+\jid{procs}
+
+%% Elsevier CRC generally uses a numbered reference style (Vancouver).
+
+% if you have landscape tables
+\usepackage[figuresright]{rotating}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%                                                                          %%
+%%   UNTRAINED-RESULTS PLACEHOLDERS -- MUST BE REPLACED BEFORE SUBMISSION    %%
+%%                                                                          %%
+%%   No model has been trained yet, so every reported number below is a      %%
+%%   placeholder.  Nothing in this manuscript is a measured result.          %%
+%%                                                                          %%
+%%   Submission gate:                                                        %%
+%%       grep -c 'TBD\|0\.XXX\|0\.0XX' PROCS_ICMLDE2024.tex                  %%
+%%   must return 0 before this file is compiled for submission.              %%
+%%                                                                          %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Baseline cell: method not yet benchmarked on our splits.
+\newcommand{\TBD}{--}
+
+%% Our model, per-dataset test-split results (5 metrics x 4 datasets).
+%% ACD1K
+\newcommand{\oMAEacd}{0.0XX}   \newcommand{\oFbacd}{0.XXX}
+\newcommand{\oSaacd}{0.XXX}    \newcommand{\oEpacd}{0.XXX}   \newcommand{\oFbdacd}{0.XXX}
+%% CAMO-Human
+\newcommand{\oMAEcam}{0.0XX}   \newcommand{\oFbcam}{0.XXX}
+\newcommand{\oSacam}{0.XXX}    \newcommand{\oEpcam}{0.XXX}   \newcommand{\oFbdcam}{0.XXX}
+%% CPD1K
+\newcommand{\oMAEcpd}{0.0XX}   \newcommand{\oFbcpd}{0.XXX}
+\newcommand{\oSacpd}{0.XXX}    \newcommand{\oEpcpd}{0.XXX}   \newcommand{\oFbdcpd}{0.XXX}
+%% MHCD
+\newcommand{\oMAEmhcd}{0.0XX}  \newcommand{\oFbmhcd}{0.XXX}
+\newcommand{\oSamhcd}{0.XXX}   \newcommand{\oEpmhcd}{0.XXX}  \newcommand{\oFbdmhcd}{0.XXX}
+%% Combined benchmark (quoted in the abstract and conclusion)
+\newcommand{\oMAEcomb}{0.0XX}  \newcommand{\oSacomb}{0.XXX}  \newcommand{\oFbdcomb}{0.XXX}
+%% Absolute S-measure gain over the strongest baseline
+\newcommand{\oGain}{X.X}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%% Shorthands used throughout
+\newcommand{\eltmul}{\odot}
+\newcommand{\Fbd}{F^{\mathrm{bd}}}
+
+\begin{document}
+\begin{frontmatter}
+
+\dochead{International Conference on Machine Learning and Data Engineering}%%%
+
+\title{Omni-Scale Frequency Decomposition with Anatomy-Guided Edge Reconstruction for Camouflaged Human Detection in Defence Surveillance}
+
+\author[a]{First Author}
+\author[a]{Second Author}
+\author[a]{Third Author\corref{cor1}}
+
+\address[a]{Bytes Technolab, Ahmedabad, Gujarat 380015, India}
+
+\begin{abstract}
+Cross-border infiltration by personnel wearing ghillie suits and disruptive-pattern uniforms remains an unsolved surveillance problem along India's land borders: engineered concealment suppresses precisely the shape, edge and colour cues on which both human observers and conventional detectors depend. Research on camouflaged object detection has advanced rapidly, but its benchmarks are overwhelmingly animal-centric, and models trained on evolved biological camouflage transfer poorly to articulated, deliberately concealed humans. We address this gap on two fronts. First, we assemble a unified camouflaged-human benchmark of 4{,}170 images by harmonising four public corpora---ACD1K, CPD1K, MHCD2022, and a newly derived human-only subset of CAMO---under a common pixel-accurate mask, boundary, and pose-prior annotation scheme, with clip-aware splitting and cross-corpus perceptual-hash deduplication. Second, we propose OS-Res2Net-CHDNet, a 25.75\,M-parameter network that couples a content-adaptive Feature Decomposition Module and a Spatial--Frequency Collaborative Attention block---which recover the residual high-frequency texture discontinuity that camouflage cannot fully erase---with an OSNet-style omni-scale neck, an Anatomy-guided Edge Reconstruction module that injects a 17-keypoint pose prior additively, and an image-level presence gate that suppresses false alarms on empty frames. On the combined test split the model attains $S_\alpha=\oSacomb$, $\mathrm{MAE}=\oMAEcomb$, and $\Fbd=\oFbdcomb$. The resulting system is intended to strengthen the automated surveillance capability of the Indian armed forces.
+\end{abstract}
+
+\begin{keyword}
+Camouflaged human detection \sep Camouflaged object detection \sep Defence surveillance \sep Frequency-domain feature decomposition \sep Omni-scale feature learning \sep Pose-guided attention \sep Border infiltration
+\end{keyword}
+\cortext[cor1]{Corresponding author. Tel.: +0-000-000-0000 ; fax: +0-000-000-0000.}
+\end{frontmatter}
+
+\email{niral.patel@bytestechnolab.com}
+
+\vspace*{-6pt}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction}
+\label{sec:intro}
+
+Infiltration across India's northern and western land frontiers is a persistent and quantitatively documented security burden. Official data placed before Parliament by the Ministry of Home Affairs record net infiltration into Jammu and Kashmir falling from $141$ in $2019$ to $51$ in $2020$, $34$ in $2021$, and $14$ in $2022$~\cite{mha2021}; independent longitudinal tracking by the South Asia Terrorism Portal reports the same downward trajectory, together with the launch-pad and training-camp infrastructure that sustains it~\cite{satp}. The Ministry of Defence Year-End Review for $2022$ records twelve infiltration attempts neutralised along the Line of Control (LoC), in which eighteen foreign terrorists were eliminated and substantial quantities of arms and ammunition recovered~\cite{mod2022}; press reporting for $2023$ indicates a partial resurgence, with roughly forty infiltrators killed while attempting to cross~\cite{dh2023}. The operationally decisive quantity, however, is not the declining trend but the residual non-zero count: the LoC extends for approximately $740$\,km across densely forested, boulder-strewn, and seasonally snowbound terrain, and every crossing that succeeds is, by definition, a failure of the surveillance grid rather than of the interception force. Because interdiction is contingent on detection, the marginal return on improving automated detection at the sensor is substantially higher than on adding further downstream response capacity.
+
+That detection problem is hard for reasons that are physical rather than procedural. Ghillie suits, disruptive-pattern uniforms, and locally improvised vegetation garnish are engineered specifically to defeat the visual cues that segmentation depends on: they fracture the body outline, randomise the internal texture statistics, and drive the foreground colour distribution towards that of the background, so the figure--ground boundary on which both an observer and a detector rely is deliberately erased. Comparative work in camouflage science establishes that disruptive coloration is effective precisely because it interferes with edge assignment and with the observer's acquired search image, and that this interference persists even when the target is fixated~\cite{cuthill2019,troscianko2018}. The failure is not confined to the visible band: security agencies along the LoC have reported the use of thermal-camouflage suits that insulate the body's heat signature sufficiently that hand-held thermal imagers could not resolve the silhouette they normally rely on~\cite{tribune2018}, which removes the assumption that an infrared channel provides a camouflage-invariant fallback. Compounding this, sustained monitoring of low-event-rate video imposes a well-documented vigilance decrement on human operators, whose detection sensitivity degrades measurably within the first half hour of watch~\cite{warm2008}. Our own measurements over the corpora assembled in this work quantify how extreme the resulting regime is: mean foreground occupancy is $0.0199$ on CPD1K and $0.0171$ on MHCD, meaning the target typically occupies under two percent of the frame, while the mean local camouflage contrast---the intensity separation between the target and an annulus of its immediate surround---falls as low as $0.0675$ on CAMO-Human. At that separation the figure--ground signal approaches the sensor noise floor, and detection cannot be recovered by contrast enhancement alone.
+
+Camouflaged object detection (COD) has matured rapidly as a research area, but almost entirely on animal subjects. The field's standard benchmarks---CAMO~\cite{camo}, CHAMELEON~\cite{chameleon}, COD10K~\cite{sinet}, and NC4K~\cite{nc4k}---are dominated by biologically camouflaged fauna, and the methods trained on them inherit that bias, from the search-and-identification paradigm of SINet and SINet-v2~\cite{sinet,sinetv2} through distraction mining~\cite{pfnet}, mutual graph learning~\cite{mgl}, explicit boundary guidance~\cite{bgnet}, frequency-domain analysis~\cite{fdnet}, feature decomposition with edge reconstruction~\cite{feder}, texture-aware refinement~\cite{tanet}, high-resolution iterative feedback~\cite{hitnet}, masked separable attention~\cite{camoformer}, mixed-scale pyramids~\cite{zoomnext}, gradient supervision~\cite{dgnet}, and edge--semantic collaboration~\cite{escnet}. The transfer to camouflaged humans is weaker than the surface similarity of the tasks suggests. Biological camouflage is evolved, statistically stationary within a species, and worn on a body plan whose articulation is limited; military concealment is deliberately engineered, changes with issue and theatre, and covers a highly articulated skeleton that adopts prone, crouched, and partially occluded postures specifically to break the silhouette a detector would key on. The human-specific literature that does exist remains small and mutually isolated: CPD1K established the first camouflaged-people corpus and a dense deconvolution baseline over woodland and snowfield scenes~\cite{ddcn}, MHCD2022 introduced a military high-level camouflage benchmark with an accompanying detection network~\cite{mhnet}, and ACD1K contributed high-resolution imagery of ghillie-suited and tactically equipped individuals across desert, forest, and snow~\cite{acd1k}. Each is small, each uses its own annotation convention and split protocol, and no unified, deduplicated, human-only benchmark spans them.
+
+Three technical gaps follow directly from this characterisation, and they organise our design. First, camouflage is engineered to destroy \emph{spatial} contrast, but the fabric-to-vegetation transition still leaves a residual discontinuity in high-frequency texture statistics that no dyeing process fully removes; a detector that operates only on the spatial-domain feature map discards this evidence. We therefore decompose every backbone feature into an adaptively estimated low-frequency component and its high-frequency residual, and recombine them under learned per-location gates, so the network can weight the surviving texture cue exactly where the spatial cue has collapsed. Second, camouflaged human targets span an extreme scale range---from a distant prone figure a few dozen pixels across to a partially occluded torso filling the frame---which a fixed receptive field cannot serve; we address this with an omni-scale neck of parallel multi-depth streams fused by a shared aggregation gate, following the omni-scale design principle established for person re-identification~\cite{osnet}, over a Res2Net backbone that already carries granular multi-scale structure within each residual block~\cite{res2net}. Third, humans possess a skeletal prior that no animal-centric model has reason to exploit, and a surveillance deployment must additionally be able to answer ``nothing here'' rather than hallucinating a target on every empty frame. We inject a precomputed $17$-keypoint pose prior~\cite{coco} through an anatomy-guided attention module whose gating is strictly additive, so a missed keypoint can never suppress a genuine detection, and we gate the final mask by an image-level presence classifier in the manner of the anabranch design~\cite{camo}.
+
+The contributions of this work are as follows.
+\begin{itemize}
+\item A unified camouflaged-human benchmark of $4{,}170$ images harmonising ACD1K, CPD1K, MHCD2022, and a newly derived human-only subset of CAMO under a single annotation scheme comprising binary masks, $4$-pixel boundary maps, pose priors, and image-level presence labels, with clip-aware splitting and cross-corpus perceptual-hash deduplication.
+\item A content-adaptive Feature Decomposition Module and a Spatial--Frequency Collaborative Attention block that jointly recover the high-frequency texture evidence camouflage leaves behind, without requiring an explicit wavelet or Fourier transform.
+\item An Anatomy-guided Edge Reconstruction module that conditions segmentation on a $17$-keypoint pose prior through a purely additive gate, together with a presence-gated output that suppresses false alarms on target-free frames.
+\item OS-Res2Net-CHDNet, a $25.75$\,M-parameter architecture integrating the above, evaluated against ten representative COD baselines across four camouflaged-human datasets under five standard metrics.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Related Work}
+\label{sec:related}
+
+% TODO: literature survey to be written.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Preliminaries and Research Methodology}
+\label{sec:method}
+
+\subsection{Overview of the research pipeline}
+
+The study proceeds in five stages. \emph{(i)~Corpus harmonisation}: four heterogeneous public sources, annotated variously with pixel masks, JPEG-compressed grey-scale ground truth, and bounding boxes only, are converted to a single on-disk representation of RGB image, strictly binary mask, binary boundary map, pose prior, and image-level presence flag. \emph{(ii)~Prior precomputation}: a pose estimator is run once over the harmonised corpus and its keypoint heat maps are cached, so that the anatomical prior costs nothing at training time and the segmentation network never back-propagates into the pose model. \emph{(iii)~Split construction}: clip-aware partitioning prevents temporally adjacent frames of the same subject from straddling a split, and a perceptual-hash pass removes cross-corpus near duplicates that would otherwise leak test content into training. \emph{(iv)~Training}: OS-Res2Net-CHDNet is optimised under a four-term objective combining a boundary-weighted structure loss, deep supervision, edge supervision, and presence classification, with multi-scale sampling. \emph{(v)~Presence-gated inference and evaluation}: a single forward pass yields a continuous saliency map gated by the predicted presence probability, scored under five standard COD metrics. Figure~\ref{fig:pipeline} summarises the network stage of this pipeline.
+
+\begin{figure}[t]
+\centering
+% TODO: replace this placeholder with the rendered pipeline figure.
+% A per-stage visualisation is produced by scripts/07_visualize_pipeline.py
+% into reports/architecture/<dataset>_pipeline.png at 300 DPI.
+% Then use:  \includegraphics[width=\hsize]{gr1_pipeline}
+\fbox{\parbox[c][52mm][c]{0.95\hsize}{\centering
+\textit{[Figure placeholder --- end-to-end architecture of OS-Res2Net-CHDNet]}\\[6pt]
+\footnotesize
+Input $\rightarrow$ Res2Net-50 encoder ($F_1\!\ldots\!F_4$) $\rightarrow$ $1\!\times\!1$ channel reduction $\rightarrow$
+per-level FDM (low/high-frequency split) $\rightarrow$ SFA (gated recombination) $\rightarrow$
+omni-scale neck $\rightarrow$ AER (pose-gated) $\rightarrow$ partial decoder $\rightarrow$
+\{side masks, edge map, presence gate\} $\rightarrow$ presence-gated output mask.
+}}
+\caption{End-to-end architecture of OS-Res2Net-CHDNet. The four pyramid levels are processed by independent instances of the FDM, SFA, omni-scale, and AER modules before top-down multiplicative decoding.}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Problem formulation}
+
+Let $I \in \mathbb{R}^{3 \times H \times W}$ be an input frame and $P \in \mathbb{R}^{17 \times H_p \times W_p}$ its cached pose prior. The task is to predict a per-pixel probability map $\hat{Y} \in [0,1]^{1 \times H \times W}$ indicating camouflaged human presence, supervised by a binary mask $M \in \{0,1\}^{1 \times H \times W}$ and a boundary map $B \in \{0,1\}^{1 \times H \times W}$. Because the deployment must tolerate target-free frames, each sample additionally carries a scalar presence label $y \in \{0,1\}$, with $y=0$ for negatives and $M \equiv 0$ in that case. Throughout, $\sigma(\cdot)$ denotes the sigmoid, $\delta(\cdot)$ the ReLU, $\eltmul$ the Hadamard product, $[\cdot\,;\cdot]$ channel concatenation, and $\mathrm{GAP}(\cdot)$ global average pooling.
+
+\subsection{Multi-scale encoder}
+
+The encoder is Res2Net-50 (\texttt{res2net50\_26w\_4s})~\cite{res2net}, pre-trained on ImageNet~\cite{imagenet}. It is chosen over a plain residual network because its hierarchical residual-like connections express multiple receptive fields \emph{within} a single block, which matters when the discriminative evidence is a texture-statistic mismatch at an unknown spatial frequency. Four pyramid levels are taken at strides $4, 8, 16, 32$ with $256$, $512$, $1024$, and $2048$ channels, and each is projected to a common width $C=64$:
+\begin{equation}
+F_i = \delta\!\left(\mathrm{BN}\!\left(\mathrm{Conv}_{1\times1}(F_i^{\mathrm{bb}})\right)\right), \qquad i = 1,\ldots,4 .
+\end{equation}
+Every subsequent module is applied independently at all four levels and is fully resolution-agnostic, so the input size is a data-loading choice rather than an architectural constant.
+
+\subsection{Feature Decomposition Module}
+
+The FDM separates each level into a smooth regional component and the high-frequency residual that carries the surviving texture evidence. Rather than fixing a cut-off, the module estimates it per image from global context. Three average-pooled estimates at kernel sizes $k \in \{3,5,7\}$ are computed with unit stride,
+\begin{equation}
+S_k = \mathrm{AvgPool}_{k}(F), \qquad k \in \{3,5,7\},
+\end{equation}
+and combined under weights predicted from the channel descriptor of $F$:
+\begin{equation}
+\boldsymbol{\alpha} = \mathrm{softmax}\!\left(W_2\,\delta\!\left(W_1\,\mathrm{GAP}(F)\right)\right) \in \mathbb{R}^{3},
+\qquad
+W_1 \in \mathbb{R}^{16 \times C},\; W_2 \in \mathbb{R}^{3 \times 16}.
+\end{equation}
+The low-frequency estimate and its residual are then
+\begin{equation}
+F_{\mathrm{LF}} = \alpha_3 S_3 + \alpha_5 S_5 + \alpha_7 S_7,
+\qquad
+F_{\mathrm{HF}} = F - F_{\mathrm{LF}} .
+\end{equation}
+The residual is sparse and high-variance, so it is stabilised by group normalisation before a depthwise--pointwise refinement:
+\begin{equation}
+\hat{F}_{\mathrm{HF}} = \delta\!\left(\mathrm{BN}\!\left(\mathrm{Conv}_{1\times1}
+\left(\delta\!\left(\mathrm{BN}\!\left(\mathrm{DWConv}_{3\times3}
+\left(\mathrm{GN}_{8}(F_{\mathrm{HF}})\right)\right)\right)\right)\right)\right).
+\end{equation}
+Making $\boldsymbol{\alpha}$ input-dependent is what distinguishes this from a fixed band-pass filter: a distant prone target in dense woodland and a near-field figure against snow place their discriminative energy at different scales, and a single learned cut-off cannot serve both.
+
+\subsection{Spatial--Frequency Collaborative Attention}
+
+The two bands are not uniformly informative across an image: in a well-blended region the high-frequency residual dominates, whereas at an occlusion boundary the low-frequency component is more reliable. The SFA block therefore learns a spatially varying recombination. Writing $\Phi = [F_{\mathrm{LF}} ; \hat{F}_{\mathrm{HF}}] \in \mathbb{R}^{2C \times H \times W}$, two independent gates are produced,
+\begin{equation}
+W_{\mathrm{LF}} = \sigma\!\left(\mathrm{Conv}_{3\times3}^{(a)}(\Phi)\right),
+\qquad
+W_{\mathrm{HF}} = \sigma\!\left(\mathrm{Conv}_{3\times3}^{(b)}(\Phi)\right),
+\end{equation}
+and applied to yield the fused response and a residual base,
+\begin{equation}
+F_{\mathrm{fuse}} = W_{\mathrm{LF}} \eltmul F_{\mathrm{LF}} + W_{\mathrm{HF}} \eltmul \hat{F}_{\mathrm{HF}},
+\qquad
+F_{\mathrm{base}} = F + F_{\mathrm{fuse}} .
+\end{equation}
+A self-refinement gate then sharpens the response:
+\begin{equation}
+F_{\mathrm{ref}} = \sigma\!\left(\mathrm{Conv}_{3\times3}\!\left(\delta\!\left(\mathrm{BN}
+\left(\mathrm{Conv}_{3\times3}(F_{\mathrm{base}})\right)\right)\right)\right),
+\qquad
+F_{\mathrm{SFA}} = F_{\mathrm{base}} + F_{\mathrm{base}} \eltmul F_{\mathrm{ref}} .
+\end{equation}
+Note that the gates are independent rather than a softmax pair, so the block may attenuate or amplify both bands at a location instead of being forced to trade one against the other.
+
+\subsection{Omni-scale neck}
+
+Each level is then passed through an omni-scale block adapted from OSNet~\cite{osnet}. The input is reduced to a bottleneck width $C/r$ with $r=4$ and processed by $T=4$ parallel streams built from stacked lightweight units,
+\begin{equation}
+\mathrm{Lite}_{3\times3}(u) = \delta\!\left(\mathrm{BN}\!\left(\mathrm{DWConv}_{3\times3}
+\left(\mathrm{Conv}_{1\times1}(u)\right)\right)\right),
+\qquad
+T_t = \underbrace{\mathrm{Lite}_{3\times3} \circ \cdots \circ \mathrm{Lite}_{3\times3}}_{t \text{ times}}(x'),
+\end{equation}
+so that stream $t$ has an effective receptive field of $2t+1$, giving the set $\{3,5,7,9\}$. A single aggregation gate, shared across streams so that their weights remain mutually calibrated, produces input-dependent channel weights,
+\begin{equation}
+g_t = \sigma\!\left(W_4\,\delta\!\left(W_3\,\mathrm{GAP}(T_t)\right)\right),
+\qquad
+y = \sum_{t=1}^{T} g_t \eltmul T_t ,
+\end{equation}
+and the block closes with expansion and a residual connection:
+\begin{equation}
+F_{\mathrm{OS}} = \delta\!\left(\mathrm{BN}\!\left(\mathrm{Conv}_{1\times1}(y)\right) + x\right).
+\end{equation}
+Sharing the gate is deliberate: with per-stream gates the block degenerates towards independent scale-specific branches, whereas a shared gate forces a single input-conditioned decision about which scale carries the evidence in this image.
+
+\subsection{Anatomy-guided Edge Reconstruction}
+
+The AER module supplies the human-specific prior. A cached pose tensor of $17$ COCO keypoint heat maps~\cite{coco} is resampled to the level's resolution, concatenated with the feature, and mapped to a single-channel spatial attention map:
+\begin{equation}
+P' = \mathrm{Resize}(P, H \times W),
+\qquad
+A = \sigma\!\left(\mathrm{Conv}_{3\times3}\!\left(\delta\!\left(\mathrm{BN}
+\left(\mathrm{Conv}_{3\times3}\!\left([P' ; F_{\mathrm{OS}}]\right)\right)\right)\right)\right) .
+\end{equation}
+The gate is applied additively rather than multiplicatively:
+\begin{equation}
+\tilde{F} = F_{\mathrm{OS}} \eltmul (A + 1).
+\label{eq:aer}
+\end{equation}
+The unit offset in Eq.~\eqref{eq:aer} is the critical design choice. A conventional multiplicative gate $F \eltmul A$ would allow the pose branch to \emph{veto} a location, which is exactly the wrong failure mode here: the pose estimator is itself operating on camouflaged input and will frequently return no keypoints for precisely the hardest targets. With the offset, a location carrying zero anatomical evidence passes through unchanged, so the prior can only add emphasis and never censor a detection the segmentation head believes in. The module is thus safe to apply even when the pose channel is entirely uninformative.
+
+\subsection{Partial decoder and multi-task heads}
+
+Decoding follows a top-down multiplicative cascade in the spirit of the partial decoder~\cite{cpd}, in which coarse semantic levels gate finer ones rather than being summed with them:
+\begin{equation}
+x_4 = \tilde{F}_4,
+\qquad
+x_i = \tilde{F}_i \eltmul \mathrm{Up}\!\left(\mathrm{Conv}_{1\times1}(x_{i+1})\right), \quad i = 3,2,1 .
+\end{equation}
+All four levels are resampled to the resolution of $x_1$, concatenated, and refined to the main logit:
+\begin{equation}
+Z = \mathrm{Conv}_{1\times1}\Big(\varphi\big(\varphi\big([\,\mathrm{Up}(x_4);\mathrm{Up}(x_3);\mathrm{Up}(x_2);x_1\,]\big)\big)\Big),
+\qquad
+\varphi(\cdot) = \delta(\mathrm{BN}(\mathrm{Conv}_{3\times3}(\cdot))).
+\end{equation}
+Three head families are attached. Deep supervision applies a $1\times1$ logit to each decoder level, $S_i = \mathrm{Up}(\mathrm{Conv}_{1\times1}(x_i))$; an edge head predicts the boundary map from the finest level, $E = \mathrm{Up}(\mathrm{Conv}_{1\times1}(x_1))$; and an anabranch-style presence gate~\cite{camo} classifies the frame from the deepest raw encoder feature,
+\begin{equation}
+p = W_6\,\mathrm{Drop}_{0.3}\!\left(\delta\!\left(W_5\,\mathrm{GAP}(F_4^{\mathrm{bb}})\right)\right),
+\qquad
+W_5 \in \mathbb{R}^{256 \times 2048},\; W_6 \in \mathbb{R}^{1 \times 256}.
+\end{equation}
+The prediction is the presence-gated mask,
+\begin{equation}
+\hat{Y} = \sigma(Z) \cdot \sigma(p),
+\label{eq:gated}
+\end{equation}
+so a confident negative multiplicatively suppresses the entire map. This matters operationally far more than it does on a standard COD benchmark, where every test image contains a target by construction; a border surveillance feed is overwhelmingly target-free, and an ungated model accumulates false alarms at the frame rate of the sensor.
+
+\subsection{Training objective}
+
+Boundaries dominate the difficulty of this task, so pixels are weighted by their local boundary proximity,
+\begin{equation}
+\omega = 1 + 5\left|\mathrm{AvgPool}_{31}(M) - M\right| ,
+\end{equation}
+which is near unity in flat interior and exterior regions and rises sharply in the transition band. The structure loss combines a weighted cross-entropy with a weighted soft IoU. With $\pi = \sigma(\cdot)$ the predicted probability,
+\begin{equation}
+\mathcal{L}_{\mathrm{wbce}} = \frac{\sum \omega \cdot \mathrm{BCE}(\pi, M)}{\sum \omega},
+\qquad
+\mathcal{L}_{\mathrm{wiou}} = 1 - \frac{\sum \omega \pi M + 1}{\sum \omega (\pi + M) - \sum \omega \pi M + 1},
+\end{equation}
+\begin{equation}
+\mathcal{L}_{\mathrm{str}}(\cdot) = \mathcal{L}_{\mathrm{wbce}} + \mathcal{L}_{\mathrm{wiou}} ,
+\end{equation}
+following the structure-loss formulation established for saliency and adopted throughout COD~\cite{f3net}. Boundary pixels are of the order of $0.1$--$1\%$ of the frame, so the edge term pairs cross-entropy with a Dice term,
+\begin{equation}
+\mathcal{L}_{\mathrm{dice}}(\pi, B) = 1 - \frac{2\sum \pi B + 1}{\sum \pi + \sum B + 1},
+\qquad
+\mathcal{L}_{\mathrm{edge}} = \frac{\sum_{n} y_n\left[\mathrm{BCE}(\pi_n, B_n) + \mathcal{L}_{\mathrm{dice}}(\pi_n, B_n)\right]}{\sum_{n} y_n},
+\end{equation}
+where the masking by $y_n$ excludes negatives, which have no boundary to supervise, while preserving a static batch shape. The presence term is a plain cross-entropy, $\mathcal{L}_{\mathrm{pres}} = \mathrm{BCE}(\sigma(p), y)$. The total objective is
+\begin{equation}
+\mathcal{L} = \mathcal{L}_{\mathrm{str}}(Z) + \sum_{i=1}^{4} \lambda_i \,\mathcal{L}_{\mathrm{str}}(S_i)
++ \lambda_e \mathcal{L}_{\mathrm{edge}} + \lambda_p \mathcal{L}_{\mathrm{pres}},
+\label{eq:total}
+\end{equation}
+with $\boldsymbol{\lambda} = (0.4, 0.6, 0.8, 1.0)$ ordered coarse to fine, $\lambda_e = 1.0$, and $\lambda_p = 0.5$. The ascending side weights reflect that the finest decoder level is closest to the supervised output resolution, while the coarse levels act mainly as a localisation regulariser.
+
+\subsection{Implementation details}
+
+Table~\ref{tab:hparams} lists the full configuration. Optimisation uses AdamW~\cite{adamw} with a discriminative learning rate: the ImageNet-initialised encoder is trained at one tenth the rate of the randomly initialised modules, and its batch-normalisation statistics are frozen for the first five epochs so that the untrained heads cannot corrupt the pre-trained representation while their gradients are large. Geometric augmentation is applied by a single shared affine warp so that image, mask, boundary map, and all seventeen pose channels remain in exact correspondence; photometric jitter is applied to the image only.
+
+\begin{table}[h]
+\caption{Training configuration for OS-Res2Net-CHDNet.}
+\label{tab:hparams}
+\begin{tabular*}{\hsize}{@{\extracolsep{\fill}}lll@{}}
+\toprule
+\textbf{Group} & \textbf{Setting} & \textbf{Value} \\
+\colrule
+Architecture & Encoder & Res2Net-50 (\texttt{res2net50\_26w\_4s}), ImageNet pre-trained \\
+             & Common feature width $C$ & 64 \\
+             & Omni-scale streams $T$ & 4 (receptive fields 3, 5, 7, 9) \\
+             & Pose prior & 17 COCO keypoints, cached at $H/4 \times W/4$ \\
+             & Total parameters & 25.75\,M \\
+\colrule
+Optimisation & Optimiser & AdamW, weight decay $1\times10^{-4}$ \\
+             & Base learning rate & $1\times10^{-4}$ \\
+             & Encoder learning-rate multiplier & 0.1 \\
+             & Schedule & cosine annealing, 5-epoch linear warm-up \\
+             & Epochs / batch size & 100 / 16 \\
+             & Gradient clipping (global norm) & 0.5 \\
+             & Encoder BatchNorm frozen & first 5 epochs \\
+             & Mixed precision / weight EMA & enabled / decay 0.999 \\
+\colrule
+Data         & Input resolution & $352 \times 352$ \\
+             & Multi-scale sampling & $\{0.75, 1.00, 1.25\}$, one scale per step \\
+             & Horizontal flip & $p = 0.5$ \\
+             & Rotation / scale jitter & $\pm 15^{\circ}$ / $[0.75, 1.25]$ \\
+             & Colour jitter (image only) & $0.2$ brightness, contrast, saturation \\
+\colrule
+Protocol     & Random seed & 42 \\
+             & Model selection & best validation $S_\alpha$ \\
+             & Inference & single forward pass, no test-time augmentation \\
+\botrule
+\end{tabular*}
+\end{table}
+
+\subsection{Novelty and expected impact}
+
+Three properties distinguish this design from the COD literature it builds on. First, frequency-domain reasoning in COD has previously relied on explicit transforms---discrete cosine analysis~\cite{fdnet} or learnable wavelets~\cite{feder}---whereas the FDM obtains an equivalent band separation from adaptively weighted pooling, at negligible cost and with a cut-off that is conditioned on image content rather than fixed at design time. Second, prior work injects boundary or gradient priors that are derived from the mask itself~\cite{bgnet,dgnet,feder}; the AER instead injects an \emph{external, semantically typed} prior specific to the human body plan, and does so through a strictly additive gate that cannot degrade performance when the prior is absent---a property that matters precisely because pose estimation fails hardest on the same inputs segmentation finds hardest. Third, the presence gate targets an operating point the standard COD protocol never measures. Benchmarks guarantee a target in every image, so a model that never predicts emptiness is never penalised; a border surveillance feed inverts that ratio, and the false-alarm rate on target-free frames determines whether an operator trusts the system at all. Retaining $1{,}024$ animal images from CAMO as explicit negatives, rather than discarding them once the human subset was extracted, supplies the supervision this gate requires.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Dataset}
+\label{sec:dataset}
+
+\subsection{Constituent corpora}
+
+Four public sources are combined. \textbf{ACD1K}~\cite{acd1k} contributes $1{,}077$ high-resolution images of individuals in ghillie suits and modern tactical outdoor gear across desert, rocky, forest, and snow terrain; its ground truth is distributed as JPEG-compressed grey-scale, which introduces a small band of ambiguous intensities that we binarise at $127$ and measure to affect $0.11\%$ of pixels on average. \textbf{CPD1K}~\cite{ddcn} contributes $1{,}000$ frames drawn from $260$ video clips in woodland and snowfield scenes, carrying pattern-family labels: woodland ($499$), desert ($150$), digital ($150$), none ($101$), snow ($50$), and urban ($50$). \textbf{MHCD2022}~\cite{mhnet} contributes military camouflage imagery annotated only with bounding boxes over five object categories, of which we retain the person class. \textbf{CAMO-Human} is our own derivation: CAMO~\cite{camo} contains both animal and human camouflage without a class label separating them, so we extract the human subset automatically and retain the remainder as negatives.
+
+\subsection{Annotation harmonisation}
+
+The four sources arrive in incompatible annotation formats, and reconciling them is a substantive part of this contribution. For MHCD, which ships boxes only, we generate pixel masks by prompting the Segment Anything family of models~\cite{sam,mobilesam,sam2} with each person box, followed by automated per-box quality control that rejects masks leaking outside the prompt box, occupying an implausible fraction of it, or fragmenting into disconnected components; of $3{,}364$ prompted boxes, $2{,}757$ were accepted, $544$ rejected for leakage, $59$ for excessive area, and $4$ for fragmentation or an undersized box. For CAMO, the human subset is identified by scoring a CLIP~\cite{clip} embedding of the ground-truth object crop against human and animal text prompts, cross-checked with a person detector, and confirmed by manual review of the contact sheet; this yields $226$ human images and retains $1{,}024$ animal images as presence-gate negatives. Across all corpora, boundary ground truth is derived from each mask by morphological erosion and dilation to a $4$-pixel band, and pose priors are precomputed once with a keypoint estimator~\cite{yolo11}, stored as $17$-channel half-precision heat maps at quarter resolution with per-keypoint confidence weighting; frames in which no person is detected receive an all-zero prior, which Eq.~\eqref{eq:aer} handles without special casing.
+
+\subsection{Splits, deduplication, and leak repair}
+
+Splits are constructed to eliminate three distinct leakage channels. Temporal leakage is addressed for CPD1K by partitioning at the level of its $260$ source clips rather than individual frames, so that no clip straddles a split boundary. Cross-corpus leakage is addressed by a perceptual difference-hash pass over the union, which identified $1{,}283$ near-duplicate pairs and removed $611$ images, predominantly between MHCD and CPD1K. Finally, the MHCD distribution as shipped defines a validation set that is a subset of its training set; we detected and repaired this during preparation, since leaving it would have made validation-based model selection meaningless. Table~\ref{tab:composition} reports the resulting composition.
+
+\begin{table}[h]
+\caption{Composition of the unified camouflaged-human benchmark after quality control and deduplication.}
+\label{tab:composition}
+\begin{tabular*}{\hsize}{@{\extracolsep{\fill}}lrrrrrl@{}}
+\toprule
+\textbf{Corpus} & \textbf{Retained} & \textbf{Negatives} & \textbf{Train} & \textbf{Val} & \textbf{Test} & \textbf{Original annotation} \\
+\colrule
+ACD1K~\cite{acd1k}      & 1{,}077 & 0       & 673   & 75  & 329   & grey-scale mask (JPEG) \\
+CPD1K~\cite{ddcn}       & 1{,}000 & 0       & 657   & 128 & 215   & binary mask, 260 clips \\
+CAMO-Human~\cite{camo}  & 226     & 1{,}024 & 100   & 14  & 112   & mask, class not labelled \\
+MHCD2022~\cite{mhnet}   & 2{,}478 & 376     & 1{,}592 & 392 & 494 & bounding box only \\
+\colrule
+\textbf{Combined}       & \textbf{4{,}170} & \textbf{1{,}400} & \textbf{2{,}523} & \textbf{497} & \textbf{1{,}150} & harmonised \\
+\botrule
+\end{tabular*}
+\end{table}
+
+\subsection{Difficulty characterisation}
+
+Table~\ref{tab:difficulty} quantifies why this benchmark is hard, and shows that its four constituents are hard in different ways. CPD1K and MHCD are dominated by small, distant targets, with mean foreground occupancy below $2\%$ of the frame; ACD1K and CAMO-Human contain far larger targets but blend them far more effectively, CAMO-Human recording the lowest local camouflage contrast in the collection at $0.0675$. A model tuned only for small-object recall would therefore succeed on two corpora and fail on the other two, which is the principal argument for evaluating on the combination rather than on any single source.
+
+\begin{table}[h]
+\caption{Difficulty statistics per corpus. Foreground area is the fraction of pixels labelled target; local camouflage contrast measures intensity separation between the target and its immediate surround, with lower values indicating better blending.}
+\label{tab:difficulty}
+\begin{tabular*}{\hsize}{@{\extracolsep{\fill}}lrrrrr@{}}
+\toprule
+\multirow{2}{*}{\textbf{Corpus}} & \multicolumn{4}{c}{\textbf{Foreground area}} & \multirow{2}{*}{\textbf{Camouflage contrast}} \\
+\cline{2-5}
+ & mean & median & $p_{10}$ & $p_{90}$ & \\
+\colrule
+ACD1K       & 0.1850 & 0.1619 & 0.0321 & 0.3902 & 0.0954 \\
+CPD1K       & 0.0199 & 0.0100 & 0.0033 & 0.0479 & 0.1172 \\
+CAMO-Human  & 0.1962 & 0.1571 & 0.0438 & 0.4086 & 0.0675 \\
+MHCD2022    & 0.0171 & 0.0055 & 0.0018 & 0.0352 & 0.1035 \\
+\botrule
+\end{tabular*}
+\end{table}
+
+\begin{figure}[t]
+\centering
+% TODO: replace with the rendered dataset figures produced by
+% scripts/06_visualize_datasets.py into reports/datasets/ at 300 DPI:
+%   01_composition.png, 02_splits.png, 03_foreground_area.png
+% Then use:  \includegraphics[width=\hsize]{gr2_dataset}
+\fbox{\parbox[c][40mm][c]{0.95\hsize}{\centering
+\textit{[Figure placeholder --- benchmark composition and difficulty]}\\[6pt]
+\footnotesize
+(a) retained versus excluded images per corpus; \quad
+(b) train/validation/test split sizes; \quad
+(c) foreground-area distribution per corpus.
+}}
+\caption{Composition and difficulty profile of the unified camouflaged-human benchmark.}
+\label{fig:dataset}
+\end{figure}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Experimental Study}
+\label{sec:experiments}
+
+\subsection{Evaluation metrics}
+
+Five metrics are reported, following standard COD practice. Mean absolute error measures the pixel-wise deviation of the continuous prediction $\hat{Y}$ from the ground truth $M$,
+\begin{equation}
+\mathrm{MAE} = \frac{1}{HW}\sum_{u=1}^{H}\sum_{v=1}^{W}\left|\hat{Y}(u,v) - M(u,v)\right| .
+\end{equation}
+The F-measure balances precision and recall with a recall-discounting factor $\beta^2 = 0.3$~\cite{wfmeasure},
+\begin{equation}
+F_\beta = \frac{(1+\beta^2)\,\mathrm{Precision} \cdot \mathrm{Recall}}{\beta^2\,\mathrm{Precision} + \mathrm{Recall}} ,
+\end{equation}
+evaluated over $255$ thresholds and reported at the adaptive threshold $\min(1, 2\bar{\hat{Y}})$. The structure measure~\cite{smeasure} combines object-aware and region-aware structural similarity with $\alpha = 0.5$,
+\begin{equation}
+S_\alpha = \alpha\, S_{o} + (1-\alpha)\, S_{r} ,
+\end{equation}
+and the enhanced-alignment measure~\cite{emeasure} captures joint pixel-level and image-level agreement through the enhanced alignment matrix $\phi$,
+\begin{equation}
+E_\phi = \frac{1}{HW}\sum_{u=1}^{H}\sum_{v=1}^{W}\phi(u,v).
+\end{equation}
+Because boundary fidelity is the property the architecture is explicitly optimised for, we additionally report a boundary F-measure $\Fbd$ computed over mask contours with a matching tolerance of $0.75\%$ of the image diagonal.
+
+\subsection{Experimental setup}
+
+Each model is trained independently on each corpus and on the combination, under the configuration of Table~\ref{tab:hparams}, and evaluated on the corresponding held-out test split. Baselines are re-trained on our splits rather than quoted from their original papers, since the corpora, the deduplication, and the leak repair all differ from the published protocols; quoting original numbers against our splits would not be a valid comparison. All methods use their published backbone and default hyperparameters.
+
+\subsection{Comparison with state-of-the-art methods}
+
+Tables~\ref{tab:sota_a} and~\ref{tab:sota_b} report the comparison across the four corpora, arranged as two vertical blocks of two datasets each.
+
+\begin{table}[h]
+\caption{Quantitative comparison on ACD1K and CAMO-Human. Best results in bold. All values are placeholders pending training.}
+\label{tab:sota_a}
+\footnotesize
+\begin{tabular*}{\hsize}{@{\extracolsep{\fill}}lccccc|ccccc@{}}
+\toprule
+\multirow{2}{*}{\textbf{Method}} & \multicolumn{5}{c|}{\textbf{ACD1K}} & \multicolumn{5}{c}{\textbf{CAMO-Human}} \\
+\cline{2-6}\cline{7-11}
+ & MAE\,$\downarrow$ & $F_\beta\,\uparrow$ & $S_\alpha\,\uparrow$ & $E_\phi\,\uparrow$ & $\Fbd\,\uparrow$
+ & MAE\,$\downarrow$ & $F_\beta\,\uparrow$ & $S_\alpha\,\uparrow$ & $E_\phi\,\uparrow$ & $\Fbd\,\uparrow$ \\
+\colrule
+SINet-v2~\cite{sinetv2}    & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+DDCN~\cite{ddcn}           & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+TANet~\cite{tanet}         & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+FEDER~\cite{feder}         & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+HitNet~\cite{hitnet}       & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+CamoFormer~\cite{camoformer} & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+ZoomNeXt~\cite{zoomnext}   & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+ESCNet~\cite{escnet}       & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+DGNet~\cite{dgnet}         & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+\colrule
+\textbf{Ours}
+ & \textbf{\oMAEacd} & \textbf{\oFbacd} & \textbf{\oSaacd} & \textbf{\oEpacd} & \textbf{\oFbdacd}
+ & \textbf{\oMAEcam} & \textbf{\oFbcam} & \textbf{\oSacam} & \textbf{\oEpcam} & \textbf{\oFbdcam} \\
+\botrule
+\end{tabular*}
+\end{table}
+
+\begin{table}[h]
+\caption{Quantitative comparison on CPD1K and MHCD2022. Best results in bold. All values are placeholders pending training.}
+\label{tab:sota_b}
+\footnotesize
+\begin{tabular*}{\hsize}{@{\extracolsep{\fill}}lccccc|ccccc@{}}
+\toprule
+\multirow{2}{*}{\textbf{Method}} & \multicolumn{5}{c|}{\textbf{CPD1K}} & \multicolumn{5}{c}{\textbf{MHCD2022}} \\
+\cline{2-6}\cline{7-11}
+ & MAE\,$\downarrow$ & $F_\beta\,\uparrow$ & $S_\alpha\,\uparrow$ & $E_\phi\,\uparrow$ & $\Fbd\,\uparrow$
+ & MAE\,$\downarrow$ & $F_\beta\,\uparrow$ & $S_\alpha\,\uparrow$ & $E_\phi\,\uparrow$ & $\Fbd\,\uparrow$ \\
+\colrule
+SINet-v2~\cite{sinetv2}    & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+DDCN~\cite{ddcn}           & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+TANet~\cite{tanet}         & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+FEDER~\cite{feder}         & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+HitNet~\cite{hitnet}       & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+CamoFormer~\cite{camoformer} & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+ZoomNeXt~\cite{zoomnext}   & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+ESCNet~\cite{escnet}       & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+DGNet~\cite{dgnet}         & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD & \TBD \\
+\colrule
+\textbf{Ours}
+ & \textbf{\oMAEcpd} & \textbf{\oFbcpd} & \textbf{\oSacpd} & \textbf{\oEpcpd} & \textbf{\oFbdcpd}
+ & \textbf{\oMAEmhcd} & \textbf{\oFbmhcd} & \textbf{\oSamhcd} & \textbf{\oEpmhcd} & \textbf{\oFbdmhcd} \\
+\botrule
+\end{tabular*}
+\end{table}
+
+\subsection{Ablation study}
+
+Table~\ref{tab:ablation} isolates the contribution of each module by cumulative addition to a Res2Net-50 encoder with the partial decoder alone. The presence-gate row is evaluated on the combined split including its $1{,}400$ negatives, since a gate cannot be assessed on a benchmark without target-free frames.
+
+\begin{table}[h]
+\caption{Cumulative ablation on the combined test split. All values are placeholders pending training.}
+\label{tab:ablation}
+\footnotesize
+\begin{tabular*}{\hsize}{@{\extracolsep{\fill}}llccccc@{}}
+\toprule
+\textbf{\#} & \textbf{Configuration} & \textbf{Params (M)} & MAE\,$\downarrow$ & $F_\beta\,\uparrow$ & $S_\alpha\,\uparrow$ & $\Fbd\,\uparrow$ \\
+\colrule
+1 & Res2Net-50 + partial decoder (baseline) & \TBD & \TBD & \TBD & \TBD & \TBD \\
+2 & \quad + FDM                              & \TBD & \TBD & \TBD & \TBD & \TBD \\
+3 & \quad + SFA                              & \TBD & \TBD & \TBD & \TBD & \TBD \\
+4 & \quad + omni-scale neck                  & \TBD & \TBD & \TBD & \TBD & \TBD \\
+5 & \quad + AER (pose prior)                 & \TBD & \TBD & \TBD & \TBD & \TBD \\
+6 & \quad + presence gate (full model)       & 25.75 & \oMAEcomb & \TBD & \oSacomb & \oFbdcomb \\
+\botrule
+\end{tabular*}
+\end{table}
+
+\subsection{Qualitative results}
+
+\begin{figure}[h]
+\centering
+% TODO: replace with a qualitative comparison grid at 300 DPI.
+% Columns: input | ground truth | SINet-v2 | FEDER | ZoomNeXt | Ours
+% Rows: one hard case per corpus (prone woodland, snow, desert ghillie, negative).
+% Then use:  \includegraphics[width=\hsize]{gr3_qualitative}
+\fbox{\parbox[c][46mm][c]{0.95\hsize}{\centering
+\textit{[Figure placeholder --- qualitative comparison]}\\[6pt]
+\footnotesize
+Columns: input, ground truth, SINet-v2, FEDER, ZoomNeXt, Ours. \\
+Rows: prone woodland target, snowfield target, desert ghillie suit, and a target-free negative frame.
+}}
+\caption{Qualitative comparison on representative hard cases from each corpus, including a target-free frame illustrating the effect of the presence gate.}
+\label{fig:qualitative}
+\end{figure}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Conclusion}
+\label{sec:conclusion}
+
+This work treats camouflaged human detection as a problem distinct from camouflaged object detection rather than a special case of it, and addresses it on both the data and the model side. We assembled a unified benchmark of $4{,}170$ images from four previously isolated corpora under a single annotation scheme, with clip-aware splitting, cross-corpus perceptual-hash deduplication, and repair of a train/validation leak present in one of the source distributions. On that benchmark we introduced OS-Res2Net-CHDNet, which recovers the high-frequency texture evidence that engineered camouflage leaves behind through content-adaptive frequency decomposition and gated spatial--frequency recombination, aggregates it across an omni-scale receptive-field bank, conditions it on a $17$-keypoint anatomical prior through a strictly additive gate, and suppresses false alarms on target-free frames through an image-level presence gate.
+
+Several limitations bound these results. The MHCD masks are SAM-derived pseudo-labels rather than human annotations, and although automated quality control rejected roughly eighteen percent of prompted boxes, residual boundary noise remains and will slightly depress the boundary F-measure on that corpus. The CAMO-Human subset comprises only $226$ images, which limits what can be concluded from it in isolation. Most importantly, the system operates on visible-band imagery alone, whereas the reported use of thermal-camouflage garments along the LoC~\cite{tribune2018} indicates that a deployed capability will eventually require multi-spectral fusion. Future work will therefore extend the benchmark to paired visible and thermal imagery, replace the SAM pseudo-labels on MHCD with verified annotations, and evaluate the presence gate against the sustained false-alarm rate on continuous target-free footage, which is the metric that ultimately determines operator trust in a deployed surveillance system.
+
+\section*{Acknowledgements}
+
+% TODO: add funding and institutional acknowledgements before submission.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% References -- Procedia Computer Science uses Vancouver numbered style.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{thebibliography}{00}
+
+\bibitem{mha2021}
+{M}inistry of Home Affairs, Government of India. (2021) ``Infiltration and terrorist attacks in J\&K." Press Information Bureau, Rajya Sabha unstarred question reply, 1 December 2021. \url{https://www.pib.gov.in/Pressreleaseshare.aspx?PRID=1776816}
+
+\bibitem{satp}
+{S}outh Asia Terrorism Portal. (2024) ``Jammu and Kashmir: Official data on terrorist violence and infiltration." Institute for Conflict Management, New Delhi. \url{https://www.satp.org/datasheet-terrorist-attack/official-data/india-jammukashmir}
+
+\bibitem{mod2022}
+{M}inistry of Defence, Government of India. (2022) ``Year end review 2022: Ministry of Defence." Press Information Bureau, 17 December 2022. \url{https://www.pib.gov.in/PressReleasePage.aspx?PRID=1884353}
+
+\bibitem{dh2023}
+{D}eccan Herald. (2023) ``Infiltration on the rise along LoC with 40 militants killed this year against 18 in 2022." 26 November 2023.
+
+\bibitem{cuthill2019}
+{C}uthill, Innes C. (2019) ``Camouflage." {\it Journal of Zoology} {\bf 308} (2): 75--92.
+
+\bibitem{troscianko2018}
+{T}roscianko, Jolyon, John Skelhorn, and Martin Stevens. (2018) ``Camouflage strategies interfere differently with observer search images." {\it Proceedings of the Royal Society B: Biological Sciences} {\bf 285} (1886): 20181386.
+
+\bibitem{tribune2018}
+{T}he Tribune. (2018) ``Pak using thermal suits to dodge night vision devices." Jammu and Kashmir edition.
+
+\bibitem{warm2008}
+{W}arm, Joel S., Raja Parasuraman, and Gerald Matthews. (2008) ``Vigilance requires hard mental work and is stressful." {\it Human Factors} {\bf 50} (3): 433--441.
+
+\bibitem{camo}
+{L}e, Trung-Nghia, Tam V. Nguyen, Zhongliang Nie, Minh-Triet Tran, and Akihiro Sugimoto. (2019) ``Anabranch network for camouflaged object segmentation." {\it Computer Vision and Image Understanding} {\bf 184}: 45--56.
+
+\bibitem{chameleon}
+{S}kurowski, Przemys{\l}aw, Hassan Abdulameer, Jakub B{\l}aszczyk, Tomasz Depta, Adam Kornacki, and Przemys{\l}aw K{\c{o}}zie{\l}. (2018) ``Animal camouflage analysis: CHAMELEON database." Unpublished technical report, Silesian University of Technology.
+
+\bibitem{sinet}
+{F}an, Deng-Ping, Ge-Peng Ji, Guolei Sun, Ming-Ming Cheng, Jianbing Shen, and Ling Shao. (2020) ``Camouflaged object detection." in {\it Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)}, 2777--2787.
+
+\bibitem{nc4k}
+{L}v, Yunqiu, Jing Zhang, Yuchao Dai, Aixuan Li, Bowen Liu, Nick Barnes, and Deng-Ping Fan. (2021) ``Simultaneously localize, segment and rank the camouflaged objects." in {\it Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)}, 11591--11601.
+
+\bibitem{sinetv2}
+{F}an, Deng-Ping, Ge-Peng Ji, Ming-Ming Cheng, and Ling Shao. (2022) ``Concealed object detection." {\it IEEE Transactions on Pattern Analysis and Machine Intelligence} {\bf 44} (10): 6024--6042.
+
+\bibitem{pfnet}
+{M}ei, Haiyang, Ge-Peng Ji, Ziqi Wei, Xin Yang, Xiaopeng Wei, and Deng-Ping Fan. (2021) ``Camouflaged object segmentation with distraction mining." in {\it Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)}, 8772--8781.
+
+\bibitem{mgl}
+{Z}hai, Qiang, Xin Li, Fan Yang, Chenglizhao Chen, Hong Cheng, and Deng-Ping Fan. (2021) ``Mutual graph learning for camouflaged object detection." in {\it Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)}, 12997--13007.
+
+\bibitem{bgnet}
+{S}un, Yujia, Shuo Wang, Chenglizhao Chen, and Tian-Zhu Xiang. (2022) ``Boundary-guided camouflaged object detection." in {\it Proceedings of the Thirty-First International Joint Conference on Artificial Intelligence (IJCAI)}, 1335--1341.
+
+\bibitem{fdnet}
+{Z}hong, Yijie, Bo Li, Lv Tang, Senyun Kuang, Shuang Wu, and Shouhong Ding. (2022) ``Detecting camouflaged object in frequency domain." in {\it Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)}, 4504--4513.
+
+\bibitem{feder}
+{H}e, Chunming, Kai Li, Yachao Zhang, Longxiang Tang, Yulun Zhang, Zhenhua Guo, and Xiu Li. (2023) ``Camouflaged object detection with feature decomposition and edge reconstruction." in {\it Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)}, 22046--22055.
+
+\bibitem{tanet}
+{R}en, Jingjing, Xiaowei Hu, Lei Zhu, Xuemiao Xu, Yangyang Xu, Weiming Wang, Zijun Deng, and Pheng-Ann Heng. (2023) ``Deep texture-aware features for camouflaged object detection." {\it IEEE Transactions on Circuits and Systems for Video Technology} {\bf 33} (3): 1157--1167.
+
+\bibitem{hitnet}
+{H}u, Xiaobin, Shuo Wang, Xuebin Qin, Hang Dai, Wenqi Ren, Donghao Luo, Ying Tai, and Ling Shao. (2023) ``High-resolution iterative feedback network for camouflaged object detection." in {\it Proceedings of the AAAI Conference on Artificial Intelligence} {\bf 37} (1): 881--889.
+
+% VERIFY: journal/year/authors confirmed; volume-issue and page range not yet confirmed.
+\bibitem{camoformer}
+{Y}in, Bowen, Xuying Zhang, Qibin Hou, Bo-Yuan Sun, Deng-Ping Fan, and Luc Van Gool. (2024) ``CamoFormer: masked separable attention for camouflaged object detection." {\it IEEE Transactions on Pattern Analysis and Machine Intelligence} {\bf 46}.
+
+% VERIFY: journal/year/authors confirmed; volume-issue and page range not yet confirmed.
+\bibitem{zoomnext}
+{P}ang, Youwei, Xiaoqi Zhao, Tian-Zhu Xiang, Lihe Zhang, and Huchuan Lu. (2024) ``ZoomNeXt: a unified collaborative pyramid network for camouflaged object detection." {\it IEEE Transactions on Pattern Analysis and Machine Intelligence} {\bf 46}.
+
+\bibitem{dgnet}
+{J}i, Ge-Peng, Deng-Ping Fan, Yu-Cheng Chou, Dengxin Dai, Alexander Liniger, and Luc Van Gool. (2023) ``Deep gradient learning for efficient camouflaged object detection." {\it Machine Intelligence Research} {\bf 20} (1): 92--108.
+
+% VERIFY: title/venue/year confirmed (ICCV 2025, first author Ye); full author list
+% and page range still to be filled in from the CVF open-access proceedings.
+\bibitem{escnet}
+{Y}e, and co-authors. (2025) ``ESCNet: edge-semantic collaborative network for camouflaged object detection." in {\it Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)}.
+
+\bibitem{ddcn}
+{Z}heng, Yunfei, Xiongwei Zhang, Feng Wang, Tieyong Cao, Meng Sun, and Xiaobing Wang. (2019) ``Detection of people with camouflage pattern via dense deconvolution network." {\it IEEE Signal Processing Letters} {\bf 26} (1): 29--33.
+
+\bibitem{mhnet}
+{L}iu, Ming, and Xiaoqin Di. (2023) ``Extraordinary MHNet: military high-level camouflage object detection network and dataset." {\it Neurocomputing} {\bf 549}: 126466.
+
+% UNVERIFIED: this is the most likely source paper for ACD1K, but the author list,
+% volume, and article number could not be confirmed (publisher page returns 403).
+% Confirm against the dataset's own README/landing page before submission.
+\bibitem{acd1k}
+{A}daptive Camouflage Dataset (ACD1K). (2025) ``Assessment of camouflage in heterogeneous environments through deep learning: analyzing object patterns and effectiveness." {\it Engineering Applications of Artificial Intelligence}.
+
+\bibitem{res2net}
+{G}ao, Shang-Hua, Ming-Ming Cheng, Kai Zhao, Xin-Yu Zhang, Ming-Hsuan Yang, and Philip Torr. (2021) ``Res2Net: a new multi-scale backbone architecture." {\it IEEE Transactions on Pattern Analysis and Machine Intelligence} {\bf 43} (2): 652--662.
+
+\bibitem{osnet}
+{Z}hou, Kaiyang, Yongxin Yang, Andrea Cavallaro, and Tao Xiang. (2019) ``Omni-scale feature learning for person re-identification." in {\it Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)}, 3702--3712.
+
+\bibitem{cpd}
+{W}u, Zhe, Li Su, and Qingming Huang. (2019) ``Cascaded partial decoder for fast and accurate salient object detection." in {\it Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)}, 3907--3916.
+
+\bibitem{f3net}
+{W}ei, Jun, Shuhui Wang, and Qingming Huang. (2020) ``F$^3$Net: fusion, feedback and focus for salient object detection." in {\it Proceedings of the AAAI Conference on Artificial Intelligence} {\bf 34} (7): 12321--12328.
+
+\bibitem{imagenet}
+{D}eng, Jia, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. (2009) ``ImageNet: a large-scale hierarchical image database." in {\it Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}, 248--255.
+
+\bibitem{adamw}
+{L}oshchilov, Ilya, and Frank Hutter. (2019) ``Decoupled weight decay regularization." in {\it Proceedings of the International Conference on Learning Representations (ICLR)}.
+
+\bibitem{coco}
+{L}in, Tsung-Yi, Michael Maire, Serge Belongie, James Hays, Pietro Perona, Deva Ramanan, Piotr Doll\'{a}r, and C. Lawrence Zitnick. (2014) ``Microsoft COCO: common objects in context." in {\it Proceedings of the European Conference on Computer Vision (ECCV)}, 740--755.
+
+\bibitem{sam}
+{K}irillov, Alexander, Eric Mintun, Nikhila Ravi, Hanzi Mao, Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer Whitehead, Alexander C. Berg, Wan-Yen Lo, Piotr Doll\'{a}r, and Ross Girshick. (2023) ``Segment anything." in {\it Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)}, 4015--4026.
+
+\bibitem{mobilesam}
+{Z}hang, Chaoning, Dongshen Han, Yu Qiao, Jung Uk Kim, Sung-Ho Bae, Seungkyu Lee, and Choong Seon Hong. (2023) ``Faster segment anything: towards lightweight SAM for mobile applications." {\it arXiv preprint} arXiv:2306.14289.
+
+\bibitem{sam2}
+{R}avi, Nikhila, Valentin Gabeur, Yuan-Ting Hu, Ronghang Hu, Chaitanya Ryali, Tengyu Ma, Haitham Khedr, Roman R\"{a}dle, Chloe Rolland, Laura Gustafson, Eric Mintun, Junting Pan, Kalyan Vasudev Alwala, Nicolas Carion, Chao-Yuan Wu, Ross Girshick, Piotr Doll\'{a}r, and Christoph Feichtenhofer. (2024) ``SAM 2: segment anything in images and videos." {\it arXiv preprint} arXiv:2408.00714.
+
+\bibitem{clip}
+{R}adford, Alec, Jong Wook Kim, Chris Hallacy, Aditya Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gretchen Krueger, and Ilya Sutskever. (2021) ``Learning transferable visual models from natural language supervision." in {\it Proceedings of the 38th International Conference on Machine Learning (ICML)}, PMLR {\bf 139}: 8748--8763.
+
+\bibitem{yolo11}
+{J}ocher, Glenn, and Jing Qiu. (2024) ``Ultralytics YOLO11." \url{https://github.com/ultralytics/ultralytics}
+
+\bibitem{smeasure}
+{F}an, Deng-Ping, Ming-Ming Cheng, Yun Liu, Tao Li, and Ali Borji. (2017) ``Structure-measure: a new way to evaluate foreground maps." in {\it Proceedings of the IEEE International Conference on Computer Vision (ICCV)}, 4548--4557.
+
+\bibitem{emeasure}
+{F}an, Deng-Ping, Cheng Gong, Yang Cao, Bo Ren, Ming-Ming Cheng, and Ali Borji. (2018) ``Enhanced-alignment measure for binary foreground map evaluation." in {\it Proceedings of the Twenty-Seventh International Joint Conference on Artificial Intelligence (IJCAI)}, 698--704.
+
+\bibitem{wfmeasure}
+{M}argolin, Ran, Lihi Zelnik-Manor, and Ayellet Tal. (2014) ``How to evaluate foreground maps?" in {\it Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}, 248--255.
+
+\end{thebibliography}
+
+\end{document}
