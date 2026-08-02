@@ -175,8 +175,8 @@ numbers** — no approximation, no reduced threshold count.
 Written to `reports/eval/<run>/`:
 
 ```
-per_image.csv     one row per image: stem, is_negative, presence_prob,
-                  all 11 mask metrics, native H/W
+per_image.csv     one row per image: stem, is_negative, gt_positive,
+                  presence_prob, all 11 mask metrics, native H/W
 summary.json      positives-only mask means, presence block, recovered run
                   config, checkpoint epoch, best_s_alpha, n test images
 metrics.md        human-readable table
@@ -184,13 +184,17 @@ failures.csv      positives sorted worst-first by S_alpha, secondary key IoU
 preds/<stem>.png  uint8 probability maps, only with --save-preds
 ```
 
-`preds/` exists so `09_visualize_predictions.py` and any later re-analysis never
-need to re-run the model. Metrics are always computed from the in-memory float
-map, never from the quantized PNG.
+`preds/` is for manual inspection and later re-analysis. It is deliberately NOT
+an input to `09_visualize_predictions.py` — that script recomputes predictions
+from the checkpoint, because it also needs the intermediate activations and
+gradients that a saved probability map cannot carry. Metrics are always computed
+from the in-memory float map, never from the quantized PNG.
 
 ## Visualization
 
-Shared conventions: PNG at dpi 180 **and** SVG, matching `06`/`07`; palette from
+Shared conventions: PNG **and** SVG (dpi 180 for the run-scoped figures, matching
+`07`; `11_dataset_figures.py` uses 200 to match `06`, since both write into
+`reports/datasets/`); palette from
 `src/chd/viz/colors.py`; `--num-images`, `--seed`, and
 `--pick {random,best,worst}` where `best`/`worst` read `failures.csv`; `--cmap`
 (default `jet`, also `inferno`/`magma`/`turbo`).
